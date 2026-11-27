@@ -102,6 +102,18 @@ export function screenHasLiveDialog(screen) {
     return false;
   }
   if (region.omp) {
+    for (let i = region.end + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (
+        isBlank(line) ||
+        isRuleLine(line) ||
+        isFooterAt(lines, i) ||
+        /Asking one question via form/i.test(line)
+      ) {
+        continue;
+      }
+      return false;
+    }
     return true;
   }
   for (let i = region.end; i < lines.length; i++) {
