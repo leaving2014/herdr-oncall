@@ -184,3 +184,33 @@ test("Pi card directory display is configurable and defaults to the folder name"
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("an OpenCode question identifies OpenCode on the card", async () => {
+  const previous = process.env.HERDR_PLUGIN_STATE_DIR;
+  const dir = mkdtempSync(join(tmpdir(), "oncall-opencode-"));
+  process.env.HERDR_PLUGIN_STATE_DIR = dir;
+  try {
+    let sent;
+    const result = await handlePiQuestion(
+      {
+        toolCallId: "call_oc",
+        agent: "opencode",
+        cwd: "/Users/leaving/ai",
+        answerMailbox: join(dir, "pi-answers", "opencode"),
+        questions: [{ question: "选哪个？", multiSelect: false, options: [{ label: "A" }, { label: "B" }] }],
+      },
+      {
+        ping: async (text) => {
+          sent = text;
+          return "om_oc";
+        },
+      },
+    );
+    assert.equal(result.ok, true);
+    assert.equal(sent.split("\n")[0], "OpenCode · ai");
+  } finally {
+    if (previous === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
+    else process.env.HERDR_PLUGIN_STATE_DIR = previous;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

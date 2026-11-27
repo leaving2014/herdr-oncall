@@ -64,7 +64,8 @@ function dirLabel(cwd) {
 function textFor(questions, index, meta = {}) {
   const question = questions[index];
   const progress = questions.length > 1 ? `第 ${index + 1} / ${questions.length} 题` : "";
-  const agent = ["Pi", dirLabel(meta.cwd)].filter(Boolean).join(" · ");
+  const label = meta.agent === "opencode" ? "OpenCode" : "Pi";
+  const agent = [label, dirLabel(meta.cwd)].filter(Boolean).join(" · ");
   return [agent, progress, question.question, question.header ? `标签：${question.header}` : ""]
     .filter(Boolean)
     .join("\n")
@@ -106,7 +107,7 @@ export async function handlePiQuestion(payload, deps = {}) {
     return { ok: false, reason: "answer-mailbox-outside-state" };
   }
 
-  const meta = { cwd: String(payload?.cwd ?? ""), agent: "pi" };
+  const meta = { cwd: String(payload?.cwd ?? ""), agent: payload?.agent === "opencode" ? "opencode" : "pi" };
   const messageId = await sendCard(questions, 0, deps, meta);
   if (!messageId) {
     return { ok: false, reason: "ping-failed" };
