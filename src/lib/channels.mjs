@@ -1,12 +1,13 @@
 import { feishuCreds, feishuOpenId, replyFeishu, sendFeishu } from "./feishu.mjs";
 import { optionKeyboard } from "./format.mjs";
 import { sendTelegram } from "./telegram.mjs";
+import { gatewayPaired, sendGatewayPing } from "../transport/gateway.mjs";
 
 // Remote channels: where a ping goes when the desk does not answer. `CHANNEL`
-// picks among the paired ones (`telegram`, `feishu`, or both, comma-separated);
-// replies are taken from every paired channel whatever it says, so answering
-// on the one you happen to have open always works.
-export const CHANNELS = ["telegram", "feishu"];
+// picks among the paired ones (`telegram`, `feishu`, `gateway`, or a
+// comma-separated list); replies are taken from every paired channel whatever
+// it says, so answering on the one you happen to have open always works.
+export const CHANNELS = ["telegram", "feishu", "gateway"];
 
 // How long a ping stays on record, which is how long a reply or a tap can
 // still be told which ping it is about.
@@ -29,7 +30,9 @@ export function feishuPaired(env = process.env) {
 }
 
 export function channelPaired(name, env = process.env) {
-  return name === "feishu" ? feishuPaired(env) : telegramPaired(env);
+  if (name === "feishu") return feishuPaired(env);
+  if (name === "gateway") return gatewayPaired(env);
+  return telegramPaired(env);
 }
 
 export function remoteChannels(env = process.env) {
@@ -43,6 +46,10 @@ export function remoteChannels(env = process.env) {
 // ordinary message instead, since the answer matters more than where it sits.
 export async function sendRemote(name, text, { status, options = [], replyTo } = {}) {
   const choices = status === "blocked" ? options : [];
+  if (name === "gateway") {
+    const response = await sendGatewayPing({ text, status, options: choices });
+    return response.messageId;
+  }
   if (name === "feishu") {
     if (replyTo) {
       try {

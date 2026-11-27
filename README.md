@@ -50,7 +50,7 @@ Two things to know:
 
 ## Phone channels
 
-Optional, for when you are away from the desk. Pair Feishu, Telegram, or both. `CHANNEL` in `.env` says where pings go (`telegram`, `feishu`, or `telegram,feishu`); replies are taken from every paired channel.
+Optional, for when you are away from the desk. Pair Feishu, Telegram, or point the plugin at a self-hosted gateway. `CHANNEL` in `.env` says where pings go (`telegram`, `feishu`, `gateway`, or a comma-separated list); replies are taken from every paired channel.
 
 ### Feishu
 
@@ -92,6 +92,21 @@ It messages the old bot `unpaired · this machine no longer sends oncall here`, 
 Pings go to Telegram while `CHANNEL` lists it. Pairing Feishu sets `CHANNEL=feishu`, so write `telegram,feishu` to get both.
 
 With drover, a paired Telegram chat works like the Feishu chat described in [With drover](#with-drover): messages to the main session are prefixed `[Telegram] `, and whoever gets into the chat can drive the main session too.
+
+### Gateway
+
+When one Go gateway owns the Feishu long connection, this plugin becomes a pane adapter and sends pings over HTTP instead of holding a Feishu app of its own. Set:
+
+```sh
+CHANNEL=gateway
+ONCALL_GATEWAY_URL=http://127.0.0.1:8787
+ONCALL_GATEWAY_TOKEN=...
+ONCALL_GATEWAY_CHAT_ID=oc_...
+```
+
+The gateway calls back to `ONCALL_CALLBACK_HOST:ONCALL_CALLBACK_PORT` (default `127.0.0.1:8790`) for replies. The callback token defaults to `ONCALL_GATEWAY_TOKEN`. Only replies that name a ping the plugin still has on record reach a pane; the gateway never sends key presses.
+
+`gateway` is a transport, not a second Feishu connection. Do not point both a gateway and this plugin at the same Feishu app: Feishu distributes events across long connections, so each side would miss some.
 
 ### Check a channel
 
@@ -399,7 +414,13 @@ Settings are `KEY=value` lines in `.env` in the config dir (`herdr plugin config
 | `NOTIFY_ON` | `blocked,done` | which statuses notify |
 | `BLOCKED_DELAY_SEC` | `60` | how long a question waits, on the panel where there is one, before the phone is pinged. `0` = ping immediately |
 | `DEBOUNCE_MS` | `2000` | drop a repeat of the same pane and status inside this window |
-| `CHANNEL` | `telegram` | where pings go: `telegram`, `feishu`, or `telegram,feishu`. Replies are taken from every paired channel. `pair-feishu` sets it to feishu, `unpair-feishu` takes feishu out |
+| `CHANNEL` | `telegram` | where pings go: `telegram`, `feishu`, `gateway`, or a comma-separated list. Replies are taken from every paired channel. `pair-feishu` sets it to feishu, `unpair-feishu` takes feishu out |
+| `ONCALL_GATEWAY_URL` | empty | gateway base URL; set with `CHANNEL=gateway` |
+| `ONCALL_GATEWAY_TOKEN` | empty | bearer token for the gateway ping API and, by default, its reply callback |
+| `ONCALL_GATEWAY_CHANNEL` | `feishu` | which IM channel the gateway posts to |
+| `ONCALL_GATEWAY_BOT_ID` / `ONCALL_GATEWAY_CHAT_ID` | empty | bot and chat the gateway posts to. Empty = the gateway default |
+| `ONCALL_CALLBACK_HOST` / `ONCALL_CALLBACK_PORT` | `127.0.0.1` / `8790` | where the poller accepts gateway replies |
+| `ONCALL_CALLBACK_TOKEN` | gateway token | bearer token the gateway must present on its reply callback |
 | `HERDR_TELEGRAM_ENABLED` | `1` | whether Oncall starts switched on. Only read until the switch is first used |
 | `HERDR_TELEGRAM_SET_TITLE` | `1` | `toggle` sets the host terminal's title while Oncall is on |
 | `HERDR_TELEGRAM_TITLE` | `oncall` | that title |
@@ -469,8 +490,10 @@ herdr-plugin.toml     manifest: actions, event hooks, build steps
 bin/                  node locator, dependency install, compiled panel
 src/desktop/          panel.swift, the macOS floating panel
 src/lib/              screen parsing, Herdr calls, config, ownership, Telegram, Feishu
+src/platforms/        platform wire contract and the herdr adapter
+src/transport/        the gateway ping client and reply callback server
 src/hooks/            notify (the event hook) and poll (the poller)
-src/inbound/          replies and delivery into the pane, escalations, the main-session inbox
+src/inbound/          replies and delivery into the pane, gateway replies, escalations, the main-session inbox
 src/actions/          setup, seed, poll, pair, pair-feishu, unpair-feishu, test, toggle, status, send-main
 test/
 ```

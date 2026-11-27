@@ -12,6 +12,7 @@ import {
   seedConfigEnv,
   sendRemote,
   sleep,
+  channelList,
   telegramGetUpdates,
 } from "../lib/index.mjs";
 import {
@@ -24,6 +25,8 @@ import {
 } from "../inbound/poller.mjs";
 import { feishuChannel, handleFeishuEvent } from "../inbound/feishu.mjs";
 import { handleTelegramUpdate, pollEnabled, readOffset, telegramChannel, writeOffset } from "../inbound/reply.mjs";
+import { gatewayChannel, handleGatewayReply } from "../inbound/gateway.mjs";
+import { gatewayPaired, startGatewayCallbackServer } from "../transport/gateway.mjs";
 import { escalationLoop } from "../inbound/escalation.mjs";
 import { inboxLoop } from "../inbound/main-inbox.mjs";
 
@@ -82,6 +85,9 @@ function chatChannel(name) {
     const creds = feishuCreds();
     const openId = feishuOpenId();
     return creds && openId ? feishuChannel(creds, openId) : undefined;
+  }
+  if (name === "gateway") {
+    return gatewayPaired() ? gatewayChannel() : undefined;
   }
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
@@ -161,6 +167,39 @@ async function feishuLoop() {
   }
 }
 
+// The gateway pushes replies here. Unlike Feishu, the connection is an HTTP
+// server the gateway calls, so there is nothing to reconnect; what changes
+// without a restart is whether the channel is configured at all.
+async function gatewayLoop() {
+  let server;
+  let said;
+  while (true) {
+    loadDotEnv();
+    const wanted = channelList().includes("gateway") && gatewayPaired();
+    if (wanted && !server) {
+      try {
+        server = await startGatewayCallbackServer({
+          onReply: (payload) => serial(() => handleGatewayReply(payload, { channel: gatewayChannel() })),
+        });
+        said = undefined;
+        console.log(`gateway · callback listening ${server.url}`);
+      } catch (error) {
+        console.error(`gateway callback failed: ${describeError(error)}`);
+      }
+    } else if (!wanted && server) {
+      await server.close().catch(() => {});
+      server = undefined;
+      said = "gateway not selected or not configured";
+    }
+    const line = wanted ? undefined : "gateway · not selected or not configured";
+    if (line && line !== said) {
+      console.log(line);
+      said = line;
+    }
+    await sleep(5000);
+  }
+}
+
 function dispatchFeishu(envelope, creds, openId) {
   const outcome = handleFeishuEvent(envelope, { creds, openId, channelFor: chatChannel });
   if (outcome.work) {
@@ -234,6 +273,7 @@ await Promise.all([
   selfCheckLoop(),
   telegramLoop(),
   feishuLoop(),
+  gatewayLoop(),
   updateLoop(),
   escalationLoop({ reload: loadDotEnv }),
   inboxLoop({ reload: loadDotEnv, serial, channelFor: chatChannel }),
