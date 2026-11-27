@@ -23,6 +23,8 @@ test("blocked replies become keys or typed enter", () => {
   assert.deepEqual(classifyDelivery("blocked", "y"), { mode: "keys", keys: ["y"] });
   assert.deepEqual(classifyDelivery("blocked", "p"), { mode: "keys", keys: ["p"] });
   assert.deepEqual(classifyDelivery("blocked", "Enter"), { mode: "keys", keys: ["enter"] });
+  assert.deepEqual(classifyDelivery("blocked", "keys:down,enter"), { mode: "keys", keys: ["down", "enter"] });
+  assert.deepEqual(classifyDelivery("blocked", "keys:"), { mode: "noop" });
   assert.deepEqual(classifyDelivery("blocked", "don't delete that"), { mode: "text-enter" });
 });
 

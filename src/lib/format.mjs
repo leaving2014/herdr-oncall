@@ -224,15 +224,19 @@ function ompFormRegion(lines) {
     }
   }
   const cursor = Math.max(0, raw.findIndex((option) => option.cursor));
+  const total = Number(/of\s+(\d+)\s+answered/i.exec(ompLineText(lines[header]))?.[1] ?? 1);
   const options = [];
   for (const [index, option] of raw.entries()) {
     const keys = [];
     for (let step = 0; step < Math.abs(index - cursor); step += 1) {
       keys.push(index > cursor ? "down" : "up");
     }
-    // One Enter picks the choice and moves to the next question. The card's
-    // input box and Submit button finish the form's note/submit step.
-    keys.push("enter");
+    // A one-question form submits on Enter, so its choices only move the
+    // cursor; Submit presses Enter. A longer form needs Enter to advance from
+    // the choice question to the note the card's input fills.
+    if (total > 1) {
+      keys.push("enter");
+    }
     options.push({
       key: String(options.length + 1),
       send: `keys:${keys.join(",")}`,

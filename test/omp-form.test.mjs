@@ -49,6 +49,19 @@ test("OMP form snippet starts at the header and stops before Submit", () => {
   assert.doesNotMatch(snippet, /╭|╰|│/);
 });
 
+test("a one-question OMP form defers the Enter to Submit", () => {
+  const one = screen.replace("1 of 2 answered", "1 of 1 answered");
+  assert.deepEqual(
+    parseBlockedOptions(one).map(({ key, send }) => ({ key, send })),
+    [
+      { key: "1", send: "keys:" },
+      { key: "2", send: "keys:down" },
+      { key: "3", send: "keys:down,down" },
+      { key: "4", send: "keys:down,down,down" },
+    ],
+  );
+});
+
 test("OMP header numbers may vary and still parse", () => {
   const changed = screen.replace("1 of 2 answered", "3 of 4 answered");
   assert.equal(dialogQuestion(changed), "接下来要我先做哪一步？");

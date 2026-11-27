@@ -73,8 +73,20 @@ export function namedReplyKey(text) {
 
 export function classifyDelivery(liveStatus, text) {
   const status = String(liveStatus || "").toLowerCase();
-  const key = namedReplyKey(text);
+  const value = String(text ?? "").trim();
   if (status === "blocked") {
+    // Card buttons carry multi-key sequences; the plugin must send those keys,
+    // not type the literal "keys:..." string into the dialog.
+    const sequence = /^keys:(.*)$/i.exec(value);
+    if (sequence) {
+      const keys = sequence[1]
+        .split(",")
+        .map((item) => item.trim())
+        .map(namedReplyKey)
+        .filter(Boolean);
+      return keys.length ? { mode: "keys", keys } : { mode: "noop" };
+    }
+    const key = namedReplyKey(value);
     if (key) {
       return { mode: "keys", keys: [key] };
     }
@@ -431,6 +443,9 @@ export function deliverReply(paneId, text, fallbackStatus, options = {}) {
   const plan = classifyDelivery(deliveryStatus(paneId, live, fallbackStatus, options), text);
   if (plan.mode !== "prompt" && options.images) {
     return imageIntoDialog();
+  }
+  if (plan.mode === "noop") {
+    return { status: 0 };
   }
   if (plan.mode === "keys") {
     return run(["pane", "send-keys", paneId, ...plan.keys]);
