@@ -26,6 +26,7 @@ import {
 import { feishuChannel, handleFeishuEvent } from "../inbound/feishu.mjs";
 import { handleTelegramUpdate, pollEnabled, readOffset, telegramChannel, writeOffset } from "../inbound/reply.mjs";
 import { gatewayChannel, handleGatewayReply } from "../inbound/gateway.mjs";
+import { handlePiQuestion } from "../inbound/pi-question.mjs";
 import { gatewayPaired, startGatewayCallbackServer } from "../transport/gateway.mjs";
 import { escalationLoop } from "../inbound/escalation.mjs";
 import { inboxLoop } from "../inbound/main-inbox.mjs";
@@ -180,6 +181,7 @@ async function gatewayLoop() {
       try {
         server = await startGatewayCallbackServer({
           onReply: (payload) => serial(() => handleGatewayReply(payload, { channel: gatewayChannel() })),
+          onPiQuestion: (payload) => serial(() => handlePiQuestion(payload, {})),
         });
         said = undefined;
         console.log(`gateway · callback listening ${server.url}`);

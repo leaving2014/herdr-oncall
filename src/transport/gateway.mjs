@@ -136,6 +136,7 @@ export async function sendGatewayPing(payload, { env = process.env, fetchImpl = 
 // which message was quoted, the plugin still owns the pane check.
 export async function startGatewayCallbackServer({
   onReply,
+  onPiQuestion,
   env = process.env,
   host,
   port,
@@ -153,7 +154,8 @@ export async function startGatewayCallbackServer({
       replyJson(res, 200, { ok: true });
       return;
     }
-    if (req.method !== "POST" || req.url !== "/oncall/reply") {
+    const piRoute = req.url === "/oncall/pi-question";
+    if (req.method !== "POST" || (req.url !== "/oncall/reply" && !piRoute)) {
       replyJson(res, 404, { ok: false, reason: "not-found" });
       return;
     }
@@ -169,6 +171,14 @@ export async function startGatewayCallbackServer({
       return;
     }
     try {
+      if (piRoute) {
+        if (typeof onPiQuestion !== "function") {
+          replyJson(res, 404, { ok: false, reason: "not-configured" });
+          return;
+        }
+        replyJson(res, 200, (await onPiQuestion(body)) ?? { ok: true });
+        return;
+      }
       const outcome = (await onReply(body)) ?? { ok: true };
       replyJson(res, 200, outcome);
     } catch (error) {

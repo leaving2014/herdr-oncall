@@ -1,6 +1,7 @@
 import { textParts } from "../lib/index.mjs";
 import { sendGatewayPing } from "../transport/gateway.mjs";
 import { finishDelivery, lookupOutbound } from "./reply.mjs";
+import { answerPiQuestion, lookupPiQuestion } from "./pi-question.mjs";
 
 export function gatewayChannel(deps = {}) {
   const send = deps.send ?? sendGatewayPing;
@@ -24,6 +25,15 @@ export async function handleGatewayReply(payload, deps = {}) {
   const text = String(payload?.text ?? "").trim();
   if (!actionKey && !text) {
     return { ok: false, reason: "empty-answer" };
+  }
+  // A Pi questionnaire has its own answer channel (the rpiv event bus), not
+  // a pane: its card is answered by index/text, never by typing keys.
+  if ((deps.lookupPi ?? lookupPiQuestion)(messageId)) {
+    const outcome = await (deps.answerPi ?? answerPiQuestion)(messageId, actionKey, text, deps);
+    if (outcome?.ok === false) {
+      return { ok: false, reason: outcome.reason || "pi-answer-failed" };
+    }
+    return { ok: true, result: outcome?.result || "answered" };
   }
   const lookup = deps.lookup ?? lookupOutbound;
   const record = lookup(messageId);
