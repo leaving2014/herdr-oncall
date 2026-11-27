@@ -46,24 +46,38 @@ function forget(messageId) {
   write(store);
 }
 
-function textFor(questions) {
-  const question = questions[0];
-  return [`问题：${question.question}`, question.header ? `标签：${question.header}` : ""]
+function textFor(questions, index) {
+  const question = questions[index];
+  const progress = questions.length > 1 ? `第 ${index + 1} / ${questions.length} 题` : "";
+  return [progress, question.question, question.header ? `标签：${question.header}` : ""]
     .filter(Boolean)
     .join("\n")
     .slice(0, MAX_QUESTION_TEXT);
 }
 
-// The Pi extension posts a prompt event here. For now one question is enough:
-// a multi-question questionnaire needs a different card protocol (one answer
-// per tab), so it is left to the terminal rather than pretending one button
-// answers the whole form.
+async function sendCard(questions, index, deps = {}) {
+  const question = questions[index];
+  const options = question.options.map((option, optionIndex) => ({
+    key: String(optionIndex + 1),
+    send: `piopt:${index}:${optionIndex}`,
+    label: String(option?.label ?? "").slice(0, 96),
+    whole: String(option?.label ?? ""),
+  }));
+  const send =
+    deps.ping ??
+    (async (text, { options }) => (await sendGatewayPing({ text, status: "blocked", options })).messageId);
+  return send(textFor(questions, index), { options });
+}
+
+// The Pi extension posts a prompt event here. A questionnaire is answered one
+// card at a time: each option advances to the next question, and the last
+// answer is posted back as one complete rpiv:ask-user:answer payload.
 export async function handlePiQuestion(payload, deps = {}) {
   const toolCallId = String(payload?.toolCallId ?? "").trim();
   const answerUrl = String(payload?.answerUrl ?? "").trim();
   const questions = Array.isArray(payload?.questions) ? payload.questions : [];
-  if (!toolCallId || !answerUrl || questions.length !== 1) {
-    return { ok: false, reason: questions.length > 1 ? "multi-question-unsupported" : "bad-question" };
+  if (!toolCallId || !answerUrl || questions.length < 1) {
+    return { ok: false, reason: "bad-question" };
   }
   const question = questions[0];
   if (!question || typeof question.question !== "string" || !Array.isArray(question.options)) {
@@ -78,16 +92,7 @@ export async function handlePiQuestion(payload, deps = {}) {
     return { ok: false, reason: "bad-answer-url" };
   }
 
-  const options = question.options.map((option, index) => ({
-    key: String(index + 1),
-    send: `piopt:${index}`,
-    label: String(option?.label ?? "").slice(0, 96),
-    whole: String(option?.label ?? ""),
-  }));
-  const send =
-    deps.ping ??
-    (async (text, { options }) => (await sendGatewayPing({ text, status: "blocked", options })).messageId);
-  const messageId = await send(textFor(questions), { options });
+  const messageId = await sendCard(questions, 0, deps);
   if (!messageId) {
     return { ok: false, reason: "ping-failed" };
   }
@@ -98,6 +103,7 @@ export async function handlePiQuestion(payload, deps = {}) {
     answerToken: payload?.answerToken ? String(payload.answerToken) : undefined,
     questionIndex: 0,
     questions,
+    answers: [],
     paneId: String(payload?.paneId ?? ""),
     at: Date.now(),
   });
@@ -109,15 +115,50 @@ export async function answerPiQuestion(messageId, actionKey, text, deps = {}) {
   if (!record) {
     return { ok: false, reason: "unknown-pi-question" };
   }
+  const question = record.questions[record.questionIndex];
+  if (!question) {
+    return { ok: false, reason: "bad-question-state" };
+  }
   let answer;
-  const option = /^piopt:(\d+)$/.exec(String(actionKey ?? "").trim());
+  const option = /^piopt:(\d+):(\d+)$/.exec(String(actionKey ?? "").trim());
   if (option) {
-    answer = { questionIndex: record.questionIndex, optionIndexes: [Number(option[1])] };
+    const questionIndex = Number(option[1]);
+    const optionIndex = Number(option[2]);
+    if (questionIndex !== record.questionIndex || !question.options[optionIndex]) {
+      return { ok: false, reason: "bad-option" };
+    }
+    answer = { questionIndex, optionIndexes: [optionIndex] };
   } else if (String(text ?? "").trim()) {
     answer = { questionIndex: record.questionIndex, text: String(text).trim() };
   } else {
     return { ok: false, reason: "empty-answer" };
   }
+
+  const answers = [...(record.answers ?? []), answer];
+  const nextIndex = record.questionIndex + 1;
+  if (nextIndex < record.questions.length) {
+    let nextMessageId;
+    try {
+      nextMessageId = await sendCard(record.questions, nextIndex, deps);
+    } catch (error) {
+      return { ok: false, reason: `next-card-failed: ${error?.message || String(error)}` };
+    }
+    if (!nextMessageId) {
+      return { ok: false, reason: "next-card-failed" };
+    }
+    const next = {
+      ...record,
+      messageId: nextMessageId,
+      questionIndex: nextIndex,
+      answers,
+    };
+    const store = read();
+    delete store[String(messageId)];
+    store[String(nextMessageId)] = next;
+    write(store);
+    return { ok: true, result: "next", messageId: nextMessageId };
+  }
+
   const headers = { "content-type": "application/json" };
   if (record.answerToken) {
     headers.authorization = `Bearer ${record.answerToken}`;
@@ -128,7 +169,7 @@ export async function answerPiQuestion(messageId, actionKey, text, deps = {}) {
       headers,
       body: JSON.stringify({
         toolCallId: record.toolCallId,
-        answers: [answer],
+        answers,
       }),
       signal: AbortSignal.timeout(10_000),
     });
