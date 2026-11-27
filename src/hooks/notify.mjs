@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   actionCommand,
   agentDetectionSkipped,
@@ -50,6 +52,7 @@ import {
   runHerdr,
   saveScreen,
   screenHasLiveDialog,
+  stateDir,
   screenHasOpenMenu,
   sessionAnswer,
   sessionDialog,
@@ -101,6 +104,22 @@ if (!modeEnabled()) {
   if (reason) {
     console.log(`off · ${reported} · ${paneId} · ${reason}; turn it back on: ${actionCommand("enable")}`);
   }
+  process.exit(0);
+}
+
+function opencodeFormActive() {
+  try {
+    const active = JSON.parse(readFileSync(join(stateDir(), "opencode-form-active.json"), "utf8"));
+    return active?.paneId === paneId && Date.now() - Number(active?.at) < 30_000;
+  } catch {
+    return false;
+  }
+}
+
+// OpenCode's form.created hook already sends an interactive question card.
+// Do not also send the generic screen-text blocked notification.
+if (reported === "blocked" && opencodeFormActive()) {
+  console.log(`skipped · blocked · ${paneId} · OpenCode form handled by the hook`);
   process.exit(0);
 }
 
