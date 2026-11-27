@@ -522,6 +522,12 @@ if (status === "blocked") {
     console.log(`skipped · ${where} · ${blockedSkipReason(screen)} · ${skipTrace(screen)}`);
     process.exit(0);
   }
+  // OpenCode v2 renders question forms as a "Questions" screen. Its TUI hook
+  // sends the interactive card; the generic blocked text would be a duplicate.
+  if (agent.kind === "opencode" && /\bQuestions\b/.test(screen)) {
+    console.log(`skipped · blocked · ${where} · OpenCode question form handled by TUI hook`);
+    process.exit(0);
+  }
 
   const delayMs = blockedDelayMs();
   // The panel gets the same gate as the chat ping: no menu on screen means
