@@ -62,6 +62,7 @@ async function sendCard(questions, index, deps = {}) {
     send: `piopt:${index}:${optionIndex}`,
     label: String(option?.label ?? "").slice(0, 96),
     whole: String(option?.label ?? ""),
+    ...(question.multiSelect ? { multi: true, cursor: 0 } : {}),
   }));
   const send =
     deps.ping ??
@@ -120,8 +121,27 @@ export async function answerPiQuestion(messageId, actionKey, text, deps = {}) {
     return { ok: false, reason: "bad-question-state" };
   }
   let answer;
-  const option = /^piopt:(\d+):(\d+)$/.exec(String(actionKey ?? "").trim());
-  if (option) {
+  // Gateway cards send a plain button's selected value in `text` (the card
+  // action has no separate actionKey), while form fields use `actionKey`.
+  const action = String(actionKey || text || "").trim();
+  const multi = /^multi:(\d+):(.*)$/.exec(action);
+  const option = /^piopt:(\d+):(\d+)$/.exec(action);
+  if (multi) {
+    const parts = action.split(":");
+    const chosen = (parts[2] || "")
+      .split(",")
+      .map((item) => Number(item))
+      .filter((index) => Number.isInteger(index) && index >= 0 && index < question.options.length);
+    const custom = parts[4] ? Buffer.from(parts.slice(4).join(":"), "base64").toString("utf8") : "";
+    answer = {
+      questionIndex: record.questionIndex,
+      ...(chosen.length ? { optionIndexes: [...new Set(chosen)] } : {}),
+      ...(custom ? { text: custom } : {}),
+    };
+    if (!answer.optionIndexes && !answer.text) {
+      return { ok: false, reason: "empty-answer" };
+    }
+  } else if (option) {
     const questionIndex = Number(option[1]);
     const optionIndex = Number(option[2]);
     if (questionIndex !== record.questionIndex || !question.options[optionIndex]) {

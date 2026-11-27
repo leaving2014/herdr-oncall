@@ -48,7 +48,7 @@ test("a Pi prompt becomes a card and a chosen option goes back as an answer", as
     assert.equal(lookupPiQuestion("om_pi_card").toolCallId, "call_123");
 
     let posted;
-    const answered = await answerPiQuestion("om_pi_card", "piopt:0:1", "", {
+    const answered = await answerPiQuestion("om_pi_card", "", "piopt:0:1", {
       fetchImpl: async (url, options) => {
         posted = { url, options };
         return { ok: true, status: 200 };
@@ -108,6 +108,50 @@ test("a multi-question Pi prompt advances one card at a time", async () => {
       { questionIndex: 0, optionIndexes: [0] },
       { questionIndex: 1, optionIndexes: [1] },
     ]);
+  } finally {
+    if (previous === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
+    else process.env.HERDR_PLUGIN_STATE_DIR = previous;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a multi-select Pi question accepts several option indexes", async () => {
+  const previous = process.env.HERDR_PLUGIN_STATE_DIR;
+  const dir = mkdtempSync(join(tmpdir(), "oncall-pi-checkbox-"));
+  process.env.HERDR_PLUGIN_STATE_DIR = dir;
+  try {
+    let sent;
+    let posted;
+    const questions = [
+      {
+        question: "选哪些？",
+        header: "多选",
+        multiSelect: true,
+        options: [{ label: "A" }, { label: "B" }, { label: "C" }],
+      },
+    ];
+    const first = await handlePiQuestion(
+      { toolCallId: "call_checkbox", answerUrl: "http://127.0.0.1:4569/answer", questions },
+      {
+        ping: async (text, { options }) => {
+          sent = { text, options };
+          return "om_checkbox";
+        },
+      },
+    );
+    assert.equal(first.ok, true);
+    assert.deepEqual(sent.options.map((o) => ({ multi: o.multi, cursor: o.cursor })), [
+      { multi: true, cursor: 0 },
+      { multi: true, cursor: 0 },
+      { multi: true, cursor: 0 },
+    ]);
+    await answerPiQuestion("om_checkbox", "multi:0:0,2", "", {
+      fetchImpl: async (url, options) => {
+        posted = JSON.parse(options.body);
+        return { ok: true, status: 200 };
+      },
+    });
+    assert.deepEqual(posted.answers, [{ questionIndex: 0, optionIndexes: [0, 2] }]);
   } finally {
     if (previous === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
     else process.env.HERDR_PLUGIN_STATE_DIR = previous;
