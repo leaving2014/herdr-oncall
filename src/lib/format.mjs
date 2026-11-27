@@ -287,6 +287,7 @@ function ompFormRegion(lines) {
       send: `keys:${keys.join(",")}`,
       label: option.label.slice(0, 96),
       whole: option.label,
+      ...(multi ? { multi: true, cursor } : {}),
     });
   }
   return {
@@ -1006,7 +1007,12 @@ function splitShortcut(raw) {
 }
 
 export function parseBlockedOptions(screen) {
-  return readOptions(screen).map(({ key, send, label }) => ({ key, send, label }));
+  return readOptions(screen).map(({ key, send, label, multi, cursor }) => ({
+    key,
+    send,
+    label,
+    ...(multi ? { multi: true, cursor } : {}),
+  }));
 }
 
 // The choices, each with its button `label` and its `whole` text — the label

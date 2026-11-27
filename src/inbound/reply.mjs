@@ -75,6 +75,35 @@ export function classifyDelivery(liveStatus, text) {
   const status = String(liveStatus || "").toLowerCase();
   const value = String(text ?? "").trim();
   if (status === "blocked") {
+    // A multi-select card sends the chosen indexes and the cursor position.
+    // Turn them into cursor moves, Space toggles, and a final Enter.
+    const multi = /^multi:(\d+):(.*)$/i.exec(value);
+    if (multi) {
+      const cursor = Math.max(0, Number(multi[1]) || 0);
+      const indices = [
+        ...new Set(
+          multi[2]
+            .split(",")
+            .map((item) => Number(item.trim()))
+            .filter((item) => Number.isInteger(item) && item >= 0),
+        ),
+      ].sort((a, b) => a - b);
+      const keys = [];
+      let current = cursor;
+      for (const index of indices) {
+        while (current < index) {
+          keys.push("down");
+          current += 1;
+        }
+        while (current > index) {
+          keys.push("up");
+          current -= 1;
+        }
+        keys.push("space");
+      }
+      keys.push("enter");
+      return { mode: "keys", keys };
+    }
     // Card buttons carry multi-key sequences; the plugin must send those keys,
     // not type the literal "keys:..." string into the dialog.
     const sequence = /^keys:(.*)$/i.exec(value);
