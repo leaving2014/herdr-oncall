@@ -970,7 +970,11 @@ function readOptions(screen) {
   const lines = screenLines(screen);
   const region = dialogRegion(lines);
   if (region?.omp) {
-    return region.options;
+    // A form that has advanced to its note field has no choices left, but it
+    // still needs a card: the input and Submit are the only way to finish it.
+    return region.options.length
+      ? region.options
+      : [{ key: "1", send: "keys:enter", label: "直接提交", whole: "直接提交" }];
   }
   // Only the choices under this question. Numbered lines elsewhere on screen
   // are earlier chat messages, not options.

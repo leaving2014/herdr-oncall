@@ -49,6 +49,19 @@ test("OMP form snippet starts at the header and stops before Submit", () => {
   assert.doesNotMatch(snippet, /╭|╰|│/);
 });
 
+test("an OMP form at its note step still gets a Submit button", () => {
+  const noteOnly = `╭─ Ask · 1 of 2 answered ─────────────────────────────╮
+│ ✓ 接下来要我先做哪一步？                            │
+│ ❯ 要补充的话（可留空）                              │
+│   │ ▏                                                │
+│   Submit                                            │
+╰─────────────────────────────────────────────────────╯
+`;
+  assert.deepEqual(parseBlockedOptions(noteOnly), [
+    { key: "1", send: "keys:enter", label: "直接提交" },
+  ]);
+});
+
 test("a one-question OMP form defers the Enter to Submit", () => {
   const one = screen.replace("1 of 2 answered", "1 of 1 answered");
   assert.deepEqual(
