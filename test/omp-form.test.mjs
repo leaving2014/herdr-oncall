@@ -30,9 +30,9 @@ test("OMP ask form yields a question and its radio choices", () => {
   assert.deepEqual(
     parseBlockedOptions(screen).map(({ key, label, send }) => ({ key, label, send })),
     [
-      { key: "1", label: "先验证冲突", send: "keys:enter,enter" },
-      { key: "2", label: "直接推进迁移", send: "keys:down,enter,enter" },
-      { key: "3", label: "不用干活", send: "keys:down,down,enter,enter" },
+      { key: "1", label: "先验证冲突", send: "keys:enter" },
+      { key: "2", label: "直接推进迁移", send: "keys:down,enter" },
+      { key: "3", label: "不用干活", send: "keys:down,down,enter" },
     ],
   );
   assert.equal(screenHasLiveDialog(screen), true);

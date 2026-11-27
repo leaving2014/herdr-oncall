@@ -224,7 +224,6 @@ function ompFormRegion(lines) {
     }
   }
   const cursor = Math.max(0, raw.findIndex((option) => option.cursor));
-  const total = Number(/of\s+(\d+)\s+answered/i.exec(ompLineText(lines[header]))?.[1] ?? 1);
   const options = [];
   for (const [index, option] of raw.entries()) {
     // The form's own "type your own" row opens an editor that a card cannot
@@ -236,12 +235,9 @@ function ompFormRegion(lines) {
     for (let step = 0; step < Math.abs(index - cursor); step += 1) {
       keys.push(index > cursor ? "down" : "up");
     }
+    // One Enter picks the choice and moves to the next question. The card's
+    // input box and Submit button finish the form's note/submit step.
     keys.push("enter");
-    // OMP advances one question per Enter; the last Enter submits. Skipping
-    // an optional note or checkbox this way still answers the chosen question.
-    for (let step = 1; step < total; step += 1) {
-      keys.push("enter");
-    }
     options.push({
       key: String(options.length + 1),
       send: `keys:${keys.join(",")}`,
