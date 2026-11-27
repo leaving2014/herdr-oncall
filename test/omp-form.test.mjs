@@ -100,7 +100,7 @@ test("a checkbox question turns into toggle buttons", () => {
 });
 
 test("a multi-question OMP form stays live", () => {
-  const multi = `╭─ Ask · 2 of 6 answered ─────────────────────────────╮
+  const multi = `╭─ Ask · 1 of 6 answered ─────────────────────────────╮
 │ 纯闲聊，几个问题，随手点就行。                      │
 │ ✓ 最喜欢的颜色                                      │
 │    ✓ 蓝色   绿色   黑/灰   暖色系                   │
@@ -237,6 +237,14 @@ test("an OMP dropdown lists all options from its ask schema", () => {
 │   Submit                                            │
 ╰─────────────────────────────────────────────────────╯
 `;
+  const previous = process.env.OMP_ASK_SCOPE;
+  process.env.OMP_ASK_SCOPE = "current";
+  try {
+    assert.match(blockedSnippet(dropdown), /^当前问题：第 7 题 \/ 共 7 题/m);
+  } finally {
+    if (previous === undefined) delete process.env.OMP_ASK_SCOPE;
+    else process.env.OMP_ASK_SCOPE = previous;
+  }
   assert.deepEqual(parseOmpDropdown(dropdown), {
     label: "家附近转转，半天来回",
     current: 1,

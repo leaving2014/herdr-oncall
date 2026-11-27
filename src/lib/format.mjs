@@ -310,11 +310,11 @@ function renderOmpCurrent(lines, region) {
   const header = region.header >= 0 ? ompLineText(lines[region.header]) : "";
   const progress = /Ask\s*[·•]\s*(\d+)\s+of\s+(\d+)/i.exec(header);
   if (progress) {
-    // OMP numbers the open question in this header ("Ask · 6 of 7" while the
-    // sixth question is focused); the word "answered" is not a count of the
-    // rows already behind it.
+    // The header counts answered questions ("Ask · 6 of 7" while the seventh
+    // is focused), so the open question is the next one, capped at the total
+    // for the note step after the last answer.
     const total = Number(progress[2]);
-    const current = Math.min(Number(progress[1]), total);
+    const current = Math.min(Number(progress[1]) + 1, total);
     out.push(`当前问题：第 ${current} 题 / 共 ${total} 题`);
   }
 
