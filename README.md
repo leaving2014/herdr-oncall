@@ -102,6 +102,8 @@ CHANNEL=gateway
 ONCALL_GATEWAY_URL=http://127.0.0.1:8787
 ONCALL_GATEWAY_TOKEN=...
 ONCALL_GATEWAY_CHAT_ID=oc_...
+# Optional: gateway bot id. The gateway may instead set oncall.bot_id as its default.
+# ONCALL_GATEWAY_BOT_ID=feishu-bot
 ```
 
 The gateway calls back to `ONCALL_CALLBACK_HOST:ONCALL_CALLBACK_PORT` (default `127.0.0.1:8790`) for replies. The callback token defaults to `ONCALL_GATEWAY_TOKEN`. Only replies that name a ping the plugin still has on record reach a pane; the gateway never sends key presses.
