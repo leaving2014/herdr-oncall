@@ -19,6 +19,8 @@ import {
   mainBlockedText,
   modeEnabled,
   nextDialog,
+  ompFormComplete,
+  ompFormSummary,
   openPanelFor,
   optionKeyboard,
   ownedElsewhere,
@@ -829,6 +831,28 @@ async function followForm(target, answered, deps) {
   });
   if (!next) {
     return false;
+  }
+  if (ompFormComplete(next.screen)) {
+    // The last answer moved OMP to Submit, not to another question. Submit the
+    // form; it must not become a card with an input that has nothing to answer.
+    const submitted = run(["pane", "send-keys", target.paneId, "enter"]);
+    if (herdrFailed(submitted)) {
+      console.error(`final submit failed · ${where}: ${herdrErrorText(submitted)}`);
+      return false;
+    }
+    const action = (process.env.OMP_FINAL_ACTION || "summary").trim().toLowerCase();
+    if (action === "submit") {
+      return true;
+    }
+    const summary = ompFormSummary(next.screen);
+    if (summary) {
+      try {
+        await channel.reply(summary);
+      } catch (error) {
+        console.error(`final summary failed · ${where}: ${describeError(error)}`);
+      }
+    }
+    return true;
   }
   const title = target.title || statusTitle({}, {}, "blocked");
   const options = dialogChoices(next.screen);

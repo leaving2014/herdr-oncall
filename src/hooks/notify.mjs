@@ -27,6 +27,8 @@ import {
   markBlockedDelay,
   modeEnabled,
   nextDialog,
+  ompFormComplete,
+  ompFormSummary,
   notOwnerReason,
   notifyPlan,
   ownership,
@@ -44,6 +46,7 @@ import {
   resolveStatus,
   resolveWorktree,
   roleSettings,
+  runHerdr,
   saveScreen,
   screenHasLiveDialog,
   screenHasOpenMenu,
@@ -365,6 +368,24 @@ async function runPanel({ options, body, timeoutMs, fingerprint, call }) {
 
 async function pingRemote(screen, doneBody, { replyTo } = {}) {
   stillOwnerOrExit();
+  // A completed OMP form is waiting on Submit, not on another question. Finish
+  // it here too, for a form answered in the terminal, and never turn it into a
+  // card whose input has nothing left to answer.
+  if (status === "blocked" && ompFormComplete(screen)) {
+    const submitted = runHerdr(["pane", "send-keys", paneId, "enter"]);
+    if (herdrFailed(submitted)) {
+      console.error(`final submit failed · ${where}: ${herdrErrorText(submitted)}`);
+      return;
+    }
+    const action = (process.env.OMP_FINAL_ACTION || "summary").trim().toLowerCase();
+    if (action !== "submit") {
+      const summary = ompFormSummary(screen);
+      if (summary && channels.length) {
+        await pingChannels(channels, summary, { status: "message", options: [], where, describe: describeError });
+      }
+    }
+    return;
+  }
   if (!channels.length) {
     console.log(`not sent · ${where} · no paired phone channel in CHANNEL=${channelList().join(",")}`);
     return;

@@ -381,6 +381,70 @@ function ompCurrentEnd(lines, region, start) {
   return region.end;
 }
 
+
+// The last answer leaves OMP's Submit control focused. That is not another
+// question: the form can be submitted, or its questions and answers can be
+// reported once, without offering an input that has nothing left to answer.
+export function ompFormComplete(screen) {
+  const lines = screenLines(screen);
+  const region = ompFormRegion(lines);
+  if (!region?.omp) {
+    return false;
+  }
+  const header = region.header >= 0 ? ompLineText(lines[region.header]) : "";
+  const progress = /Ask\s*[·•]\s*(\d+)\s+of\s+(\d+)/i.exec(header);
+  if (!progress || Number(progress[1]) < Number(progress[2])) {
+    return false;
+  }
+  return region.optionStart === region.end;
+}
+
+// OMP's completed form is a flat list: a `✓` question row, then its answer
+// row(s). Render that once for the chat so the final message is a record, not
+// another card with an input box.
+export function ompFormSummary(screen) {
+  const lines = screenLines(screen);
+  const region = ompFormRegion(lines);
+  if (!region?.omp || !ompFormComplete(screen)) {
+    return "";
+  }
+  const entries = [];
+  let current;
+  for (let i = region.start; i < region.end; i++) {
+    const inner = ompInnerText(lines[i]);
+    const trimmed = inner.trim();
+    if (!trimmed) {
+      continue;
+    }
+    if (/^(?:[❯›▸>]\s*)?Submit\b/i.test(trimmed)) {
+      continue;
+    }
+    const indent = /^\s*/.exec(inner)?.[0].length ?? 0;
+    const question = /^[✓✔]\s+(.+)$/u.exec(trimmed);
+    if (question && indent <= 1) {
+      current = { question: question[1].trim(), answers: [] };
+      entries.push(current);
+      continue;
+    }
+    if (current && indent >= 2) {
+      const answer = trimmed
+        .replace(/[✓✔☑☒◉●○]\s*/gu, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (answer) {
+        current.answers.push(answer);
+      }
+    }
+  }
+  if (!entries.length) {
+    return "";
+  }
+  const body = entries
+    .map((entry, index) => `${index + 1}. ${entry.question}：${entry.answers.join(" ") || "（未填）"}`)
+    .join("\n");
+  return `全部问题与回答（${entries.length}/${entries.length}）\n${body}`;
+}
+
 function renderOmpBlock(lines, region) {
   const out = [];
   for (let i = region.start; i < region.end; i++) {

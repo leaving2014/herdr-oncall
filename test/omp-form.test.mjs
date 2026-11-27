@@ -4,6 +4,8 @@ import {
   blockedSnippet,
   dialogFingerprint,
   dialogQuestion,
+  ompFormComplete,
+  ompFormSummary,
   parseBlockedOptions,
   screenHasLiveDialog,
   screenHasOpenMenu,
@@ -171,4 +173,34 @@ test("OMP header numbers may vary and still parse", () => {
 test("OMP fingerprint follows a changed label", () => {
   const changed = screen.replace("直接推进迁移", "直接推进别的迁移");
   assert.notEqual(dialogFingerprint(screen), dialogFingerprint(changed));
+});
+
+const completeForm = `╭─ Ask · 6 of 6 answered ─────────────────────────────╮
+│ 纯闲聊，几个问题，随手点就行。                      │
+│ ✓ 最喜欢的颜色                                      │
+│    ✓ 蓝色   绿色                                    │
+│ ✓ 运动偏好                                          │
+│    ✓ 跑步 / 徒步                                    │
+│ ✓ 理想的周末                                        │
+│    ✓ 宅家                                           │
+│ ✓ 喝的                                              │
+│    ✓ 咖啡   ✓ 茶                                    │
+│ ✓ 一天里状态最好的时段                              │
+│    13                                               │
+│ ✓ 随便再说一句（可留空）                            │
+│    喜欢听歌                                         │
+│ ❯ Submit                                            │
+╰─────────────────────────────────────────────────────╯
+  󱊷 Asking several personal small-talk questions
+`;
+
+test("a completed OMP form is submitted and summarized without an input", () => {
+  assert.equal(ompFormComplete(completeForm), true);
+  assert.equal(ompFormComplete(screen), false);
+  const summary = ompFormSummary(completeForm);
+  assert.match(summary, /^全部问题与回答（6\/6）/m);
+  assert.match(summary, /1\. 最喜欢的颜色：蓝色 绿色/);
+  assert.match(summary, /5\. 一天里状态最好的时段：13/);
+  assert.match(summary, /6\. 随便再说一句（可留空）：喜欢听歌/);
+  assert.doesNotMatch(summary, /Submit/);
 });

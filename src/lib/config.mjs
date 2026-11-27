@@ -6,6 +6,7 @@ import { configDirPath, pluginRoot, stateDir } from "./paths.mjs";
 
 export const DEFAULT_NOTIFY_ON = "blocked,done";
 export const DEFAULT_OMP_ASK_SCOPE = "current";
+export const DEFAULT_OMP_FINAL_ACTION = "summary";
 
 export function seedConfigEnv() {
   const dir = configDirPath();
@@ -33,6 +34,9 @@ function upgradeEnvKeys(envPath) {
   }
   if (!/^OMP_ASK_SCOPE=/m.test(content)) {
     content = `${content.replace(/\s*$/, "")}\nOMP_ASK_SCOPE=${DEFAULT_OMP_ASK_SCOPE}\n`;
+  }
+  if (!/^OMP_FINAL_ACTION=/m.test(content)) {
+    content = `${content.replace(/\s*$/, "")}\nOMP_FINAL_ACTION=${DEFAULT_OMP_FINAL_ACTION}\n`;
   }
   if (content !== original) {
     writeFileSync(envPath, content, "utf8");

@@ -537,6 +537,25 @@ const TAB_TWO = formTab(
 
 // A pane whose screen moves on when a key lands, the way a form does. `after`
 // is what is drawn once the key is in, and `status` what Herdr says throughout.
+
+const OMP_NOTE = `╭─ Ask · 1 of 2 answered ─────────────────────────────╮
+│ ✓ 第一个问题                                        │
+│   ✓ 回答一                                          │
+│ ❯ 第二个问题（可留空）                              │
+│   │ ▏                                                │
+│   Submit                                            │
+╰─────────────────────────────────────────────────────╯
+`;
+
+const OMP_COMPLETE = `╭─ Ask · 2 of 2 answered ─────────────────────────────╮
+│ ✓ 第一个问题                                        │
+│   ✓ 回答一                                          │
+│ ✓ 第二个问题（可留空）                              │
+│   回答二                                            │
+│ ❯ Submit                                            │
+╰─────────────────────────────────────────────────────╯
+`;
+
 function steppingPane({ before, after, statusBefore, statusAfter, calls }) {
   let answered = false;
   return (args) => {
@@ -657,6 +676,86 @@ test("answering a form's question from telegram pings the next one", async () =>
     // No session to read the question from here, so it came off the screen,
     // and that screen is kept for a fixture.
     assert.equal(readFileSync(join(process.env.HERDR_PLUGIN_STATE_DIR, "last-blocked-screen.txt"), "utf8"), TAB_TWO);
+  });
+});
+
+test("the last OMP answer submits and sends a summary without an input", async () => {
+  await withStateDir(async () => {
+    rememberOutbound({
+      messageId: 7,
+      paneId: "w8:p1",
+      status: "blocked",
+      where: "sample-portal · pane 1",
+      fingerprint: dialogFingerprint(OMP_NOTE),
+    });
+    const calls = [];
+    const sent = [];
+    const previous = process.env.OMP_FINAL_ACTION;
+    process.env.OMP_FINAL_ACTION = "summary";
+    try {
+      const result = await handleTelegramUpdate(tapOn(7, "1"), {
+        token: "t",
+        chatId: "55",
+        send: telegramRecorder(sent),
+        answer: async () => {},
+        wait: async () => {},
+        run: steppingPane({
+          before: OMP_NOTE,
+          after: OMP_COMPLETE,
+          statusBefore: "blocked",
+          statusAfter: "blocked",
+          calls,
+        }),
+      });
+      assert.equal(result.ok, true);
+      assert.equal(result.followed, true);
+      assert.ok(calls.includes("pane send-keys w8:p1 enter"));
+      assert.equal(sent.length, 2, "the ack, then the final summary");
+      assert.match(sent[1].text, /^全部问题与回答（2\/2）/m);
+      assert.match(sent[1].text, /第二个问题（可留空）：回答二/);
+      assert.deepEqual(sent[1].buttons, undefined);
+    } finally {
+      if (previous === undefined) delete process.env.OMP_FINAL_ACTION;
+      else process.env.OMP_FINAL_ACTION = previous;
+    }
+  });
+});
+
+test("the last OMP answer can submit without a summary", async () => {
+  await withStateDir(async () => {
+    rememberOutbound({
+      messageId: 7,
+      paneId: "w8:p1",
+      status: "blocked",
+      where: "sample-portal · pane 1",
+      fingerprint: dialogFingerprint(OMP_NOTE),
+    });
+    const calls = [];
+    const sent = [];
+    const previous = process.env.OMP_FINAL_ACTION;
+    process.env.OMP_FINAL_ACTION = "submit";
+    try {
+      const result = await handleTelegramUpdate(tapOn(7, "1"), {
+        token: "t",
+        chatId: "55",
+        send: telegramRecorder(sent),
+        answer: async () => {},
+        wait: async () => {},
+        run: steppingPane({
+          before: OMP_NOTE,
+          after: OMP_COMPLETE,
+          statusBefore: "blocked",
+          statusAfter: "blocked",
+          calls,
+        }),
+      });
+      assert.equal(result.ok, true);
+      assert.ok(calls.includes("pane send-keys w8:p1 enter"));
+      assert.deepEqual(sent.map((message) => message.text), ["sent · sample-portal · pane 1"]);
+    } finally {
+      if (previous === undefined) delete process.env.OMP_FINAL_ACTION;
+      else process.env.OMP_FINAL_ACTION = previous;
+    }
   });
 });
 
