@@ -36,6 +36,8 @@ test("blocked replies become keys or typed enter", () => {
     text: "自定义",
   });
   assert.deepEqual(classifyDelivery("blocked", "don't delete that"), { mode: "text-enter" });
+  assert.deepEqual(classifyDelivery("blocked", "8"), { mode: "keys", keys: ["8"] });
+  assert.deepEqual(classifyDelivery("blocked", "8", { textInput: true }), { mode: "text-enter" });
 });
 
 test("done and idle replies are new prompts", () => {

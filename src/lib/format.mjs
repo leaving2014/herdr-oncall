@@ -399,6 +399,18 @@ export function ompFormComplete(screen) {
   return region.optionStart === region.end;
 }
 
+// An OMP question with no choices is an input field, not a key menu. A single
+// digit typed into it must be typed (and the old value cleared first), not sent
+// as a keypress into the existing contents (`7` + `8` became `87`).
+export function dialogHasTextInput(screen) {
+  const lines = screenLines(screen);
+  const region = ompFormRegion(lines);
+  if (!region?.omp || ompFormComplete(screen)) {
+    return false;
+  }
+  return region.optionStart === region.end;
+}
+
 // OMP's completed form is a flat list: a `✓` question row, then its answer
 // row(s). Render that once for the chat so the final message is a record, not
 // another card with an input box.

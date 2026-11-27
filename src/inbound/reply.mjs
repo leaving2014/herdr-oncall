@@ -11,6 +11,7 @@ import {
   currentPaneStatus,
   dialogChoices,
   dialogFingerprint,
+  dialogHasTextInput,
   envFlag,
   extractStartPayload,
   fetchedImages,
@@ -73,7 +74,7 @@ export function namedReplyKey(text) {
   return undefined;
 }
 
-export function classifyDelivery(liveStatus, text) {
+export function classifyDelivery(liveStatus, text, options = {}) {
   const status = String(liveStatus || "").toLowerCase();
   const value = String(text ?? "").trim();
   if (status === "blocked") {
@@ -131,9 +132,14 @@ export function classifyDelivery(liveStatus, text) {
         .filter(Boolean);
       return keys.length ? { mode: "keys", keys } : { mode: "noop" };
     }
-    const key = namedReplyKey(value);
-    if (key) {
-      return { mode: "keys", keys: [key] };
+    // A single character is normally a menu shortcut, but in a free-text
+    // question it is the answer itself. Without this, typing 8 into a numeric
+    // field sent the 8 key into the previous value instead of replacing it.
+    if (!(options.textInput && /^[a-z0-9]$/i.test(value))) {
+      const key = namedReplyKey(value);
+      if (key) {
+        return { mode: "keys", keys: [key] };
+      }
     }
     return { mode: "text-enter" };
   }
@@ -485,7 +491,14 @@ export function deliverReply(paneId, text, fallbackStatus, options = {}) {
   if (stale) {
     return stale;
   }
-  const plan = classifyDelivery(deliveryStatus(paneId, live, fallbackStatus, options), text);
+  // Only a checked dialog (one with a fingerprint) is read again for its
+  // input shape; legacy bare replies keep their old no-extra-read path.
+  const screen =
+    options.screen ??
+    (options.fingerprint ? readPaneScreen(paneId, {}, options.run ?? runHerdr) : "");
+  const plan = classifyDelivery(deliveryStatus(paneId, live, fallbackStatus, options), text, {
+    textInput: Boolean(screen) && dialogHasTextInput(screen),
+  });
   if (plan.mode !== "prompt" && options.images) {
     return imageIntoDialog();
   }

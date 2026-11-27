@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   blockedSnippet,
   dialogFingerprint,
+  dialogHasTextInput,
   dialogQuestion,
   ompFormComplete,
   ompFormSummary,
@@ -203,4 +204,22 @@ test("a completed OMP form is submitted and summarized without an input", () => 
   assert.match(summary, /5\. 一天里状态最好的时段：13/);
   assert.match(summary, /6\. 随便再说一句（可留空）：喜欢听歌/);
   assert.doesNotMatch(summary, /Submit/);
+});
+
+test("a choice-less OMP question is a text input, not a key menu", () => {
+  const numeric = `╭─ Ask · 4 of 7 answered ─────────────────────────────╮
+│ ✓ 填空：最近单曲循环的一首歌                        │
+│   westlife                                          │
+│ ❯ 数字：工作日平均睡几小时  3–12                    │
+│   │ 7                                               │
+│     Must be at most 12                              │
+│ ✓ 下拉：想出去放松的话，倾向哪种                    │
+│   ✓ 家附近转转                                      │
+│ ○ 长填空：随便说说（可留空）                        │
+│   工作                                              │
+│   Submit                                            │
+╰─────────────────────────────────────────────────────╯
+`;
+  assert.equal(dialogHasTextInput(numeric), true);
+  assert.equal(dialogHasTextInput(screen), false);
 });
