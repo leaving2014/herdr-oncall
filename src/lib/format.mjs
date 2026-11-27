@@ -132,7 +132,10 @@ export function screenHasOpenMenu(screen) {
   const lines = screenLines(screen);
   const region = dialogRegion(lines);
   if (region?.omp) {
-    return region.options.length >= 2;
+    // An OMP form is a dialog even when its choices are folded away and only
+    // the note field and Submit are left. Treating it as a menu keeps typed
+    // card input on the text+Enter path instead of herdr's prompt path.
+    return true;
   }
   if (region?.optionStart === undefined) {
     return false;
@@ -180,19 +183,9 @@ function ompOptionAt(line) {
 }
 
 function ompFormRegion(lines) {
-  let header = -1;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (/^Ask\s*[·•]\s*\d+\s+of\s+\d+\s+answered/i.test(ompLineText(lines[i]))) {
-      header = i;
-      break;
-    }
-  }
-  if (header < 0) {
-    return undefined;
-  }
   let submit = -1;
-  for (let i = header + 1; i < lines.length; i++) {
-    if (/^Submit\b/i.test(ompLineText(lines[i]))) {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (/^(?:[❯›▸>]\s*)?Submit\b/i.test(ompLineText(lines[i]))) {
       submit = i;
       break;
     }
@@ -200,9 +193,30 @@ function ompFormRegion(lines) {
   if (submit < 0) {
     return undefined;
   }
+  let header = -1;
+  for (let i = submit - 1; i >= 0; i--) {
+    if (/^Ask\s*[·•]\s*\d+\s+of\s+\d+\s+answered/i.test(ompLineText(lines[i]))) {
+      header = i;
+      break;
+    }
+  }
+  // The form grows past the viewport as questions are answered; its title
+  // scrolls off before its Submit row does. Only the boxed body is left, so
+  // anchor the region on Submit and walk back over the box lines.
+  let start = header;
+  if (start < 0) {
+    start = submit;
+    while (start > 0) {
+      const text = stripAnsi(lines[start - 1]).trim();
+      if (!text || !/^[│╭╰┌└]/.test(text)) {
+        break;
+      }
+      start -= 1;
+    }
+  }
   let optionStart = -1;
   let optionEnd = -1;
-  for (let i = header + 1; i < submit; i++) {
+  for (let i = start + 1; i < submit; i++) {
     if (ompOptionAt(lines[i])) {
       if (optionStart < 0) {
         optionStart = i;
@@ -224,7 +238,7 @@ function ompFormRegion(lines) {
     }
   }
   const cursor = Math.max(0, raw.findIndex((option) => option.cursor));
-  const total = Number(/of\s+(\d+)\s+answered/i.exec(ompLineText(lines[header]))?.[1] ?? 1);
+  const total = Number(/of\s+(\d+)\s+answered/i.exec(ompLineText(lines[header] ?? ""))?.[1] ?? 1);
   const options = [];
   for (const [index, option] of raw.entries()) {
     const keys = [];
@@ -246,8 +260,8 @@ function ompFormRegion(lines) {
   }
   return {
     omp: true,
-    start: header,
-    header,
+    start,
+    header: header < 0 ? start : header,
     optionStart: optionStart < 0 ? submit : optionStart,
     end: submit,
     options: options.slice(0, 9),

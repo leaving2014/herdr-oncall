@@ -60,6 +60,22 @@ test("an OMP form at its note step still gets a Submit button", () => {
   assert.deepEqual(parseBlockedOptions(noteOnly), [
     { key: "1", send: "keys:enter", label: "直接提交" },
   ]);
+  assert.equal(screenHasOpenMenu(noteOnly), true);
+});
+
+test("an OMP form whose title scrolled off still parses", () => {
+  const headerless = `│ 随便问一个：你最近在纠结什么。                              │
+│ ✓ 接下来要我先做哪一步？                                      │
+│    先把 herdr 插件与网…   ✓ 不用干活                         │
+│ ✓ 要补充的话（可留空）                                        │
+│   什么都不用干                                                │
+│ ❯ Submit                                                      │
+`;
+  assert.deepEqual(parseBlockedOptions(headerless), [
+    { key: "1", send: "keys:enter", label: "直接提交" },
+  ]);
+  assert.equal(screenHasOpenMenu(headerless), true);
+  assert.match(blockedSnippet(headerless), /^随便问一个/);
 });
 
 test("a one-question OMP form defers the Enter to Submit", () => {
