@@ -490,10 +490,15 @@ export function deliverReply(paneId, text, fallbackStatus, options = {}) {
   if (plan.mode === "noop") {
     return { status: 0 };
   }
+  const clearInput = () => run(["pane", "send-keys", paneId, "end", "ctrl+u"]);
   if (plan.mode === "keys-text") {
     const keyed = run(["pane", "send-keys", paneId, ...plan.keys]);
     if (herdrFailed(keyed)) {
       return keyed;
+    }
+    const cleared = clearInput();
+    if (herdrFailed(cleared)) {
+      return cleared;
     }
     const typed = run(["pane", "send-text", paneId, plan.text]);
     if (herdrFailed(typed)) {
@@ -505,6 +510,12 @@ export function deliverReply(paneId, text, fallbackStatus, options = {}) {
     return run(["pane", "send-keys", paneId, ...plan.keys]);
   }
   if (plan.mode === "text-enter") {
+    // A default value in the form is already in the input; replace it rather
+    // than appending to it (10 + 13 became 1013).
+    const cleared = clearInput();
+    if (herdrFailed(cleared)) {
+      return cleared;
+    }
     const typed = run(["pane", "send-text", paneId, text]);
     if (herdrFailed(typed)) {
       return typed;
@@ -522,6 +533,10 @@ export function deliverReply(paneId, text, fallbackStatus, options = {}) {
     }
     if (options.images) {
       return imageIntoDialog();
+    }
+    const cleared = clearInput();
+    if (herdrFailed(cleared)) {
+      return cleared;
     }
     const typed = run(["pane", "send-text", paneId, text]);
     if (herdrFailed(typed)) {
