@@ -55,6 +55,9 @@ export function paneIdFrom(event, context) {
 export function blockedSnippet(screen, limit = 24) {
   const lines = screenLines(screen);
   const region = dialogRegion(lines);
+  if (region?.omp) {
+    return capSnippet(renderOmpBlock(lines, region));
+  }
   const slice = region
     ? lines.slice(region.start, region.end)
     : lines.filter((line) => !isBlank(line)).slice(-limit);
@@ -68,6 +71,13 @@ export function dialogQuestion(screen) {
   const region = dialogRegion(lines);
   if (!region || region.header === region.optionStart) {
     return "";
+  }
+  if (region.omp) {
+    const question = lines
+      .slice(region.header + 1, region.optionStart)
+      .map(ompLineText)
+      .find((line) => /[?？]\s*$/.test(line));
+    return question ?? ompLineText(lines[region.header]);
   }
   return lines[region.header].trim();
 }
@@ -90,6 +100,9 @@ export function screenHasLiveDialog(screen) {
   const region = dialogRegion(lines);
   if (!region) {
     return false;
+  }
+  if (region.omp) {
+    return true;
   }
   for (let i = region.end; i < lines.length; i++) {
     const line = lines[i];
@@ -118,6 +131,9 @@ export function screenHasOpenMenu(screen) {
   }
   const lines = screenLines(screen);
   const region = dialogRegion(lines);
+  if (region?.omp) {
+    return region.options.length >= 2;
+  }
   if (region?.optionStart === undefined) {
     return false;
   }
@@ -127,11 +143,127 @@ export function screenHasOpenMenu(screen) {
   return cursor && parseBlockedOptions(screen).length >= 2;
 }
 
+// OMP's ask tool draws a different form:
+//
+//   ╭─ Ask · 1 of 2 answered ─────────────────────────────╮
+//   │ 接下来要我先做哪一步？                              │
+//   │ ❯ ◉ 先验证冲突                                      │
+//   │   ○ 直接迁移                                        │
+//   │   ○ Other: type your own                            │
+//   │                                                     │
+//   │ ○ 要补充的话（可留空）                              │
+//   │   Submit                                            │
+//   ╰─────────────────────────────────────────────────────╯
+//
+// It has no numbered choices and its labels use radio glyphs. Recognising this
+// form keeps its silent screen dump from becoming one long text ping, and gives
+// the notification its question and its first run of radio choices.
+function ompLineText(raw) {
+  return stripAnsi(raw)
+    .replace(/^[\s╭╰─│┃|]+/, "")
+    .replace(/[\s╮╯─│┃|]+$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function ompOptionAt(line) {
+  const text = ompLineText(line);
+  const match = text.match(/^(?:[❯›▸>]\s*)?([◉○●⚪])\s+(.+)$/u);
+  if (!match) {
+    return undefined;
+  }
+  return { selected: /[◉●]/.test(match[1]), label: match[2].trim() };
+}
+
+function ompFormRegion(lines) {
+  let header = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (/^Ask\s*[·•]\s*\d+\s+of\s+\d+\s+answered/i.test(ompLineText(lines[i]))) {
+      header = i;
+      break;
+    }
+  }
+  if (header < 0) {
+    return undefined;
+  }
+  let submit = -1;
+  for (let i = header + 1; i < lines.length; i++) {
+    if (/^Submit\b/i.test(ompLineText(lines[i]))) {
+      submit = i;
+      break;
+    }
+  }
+  if (submit < 0) {
+    return undefined;
+  }
+  let optionStart = -1;
+  let optionEnd = -1;
+  for (let i = header + 1; i < submit; i++) {
+    if (ompOptionAt(lines[i])) {
+      if (optionStart < 0) {
+        optionStart = i;
+      }
+      optionEnd = i;
+      continue;
+    }
+    if (optionStart >= 0 && isBlank(ompLineText(lines[i]))) {
+      break;
+    }
+  }
+  const options = [];
+  if (optionStart >= 0) {
+    let index = 0;
+    for (let i = optionStart; i <= optionEnd; i++) {
+      const option = ompOptionAt(lines[i]);
+      if (!option) {
+        continue;
+      }
+      index += 1;
+      options.push({
+        key: String(index),
+        send: String(index),
+        label: option.label.slice(0, 96),
+        whole: option.label,
+      });
+    }
+  }
+  return {
+    omp: true,
+    start: header,
+    header,
+    optionStart: optionStart < 0 ? submit : optionStart,
+    end: submit,
+    options: options.slice(0, 9),
+  };
+}
+
+function renderOmpBlock(lines, region) {
+  const out = [];
+  for (let i = region.start; i < region.end; i++) {
+    const text = ompLineText(lines[i]);
+    if (!text) {
+      if (out.length && out.at(-1) !== "") {
+        out.push("");
+      }
+      continue;
+    }
+    out.push(text);
+  }
+  while (out.length && out.at(-1) === "") {
+    out.pop();
+  }
+  return out.join("\n").trim();
+}
+
 // The dialog as the terminal drew it: where the content being approved starts,
 // where the question is, and where the options end. Boundaries come from the
 // UI's own structure (turn markers, rules, paragraph breaks), never from a
 // line count — the input is one viewport, so there is nothing to guard against.
 export function dialogRegion(lines) {
+  const omp = ompFormRegion(lines);
+  if (omp) {
+    return omp;
+  }
   const options = trailingOptionRun(lines);
   const header = questionIndex(lines, options);
   if (header < 0 && !options) {
@@ -820,6 +952,9 @@ export function parseBlockedOptions(screen) {
 function readOptions(screen) {
   const lines = screenLines(screen);
   const region = dialogRegion(lines);
+  if (region?.omp) {
+    return region.options;
+  }
   // Only the choices under this question. Numbered lines elsewhere on screen
   // are earlier chat messages, not options.
   const candidates =
