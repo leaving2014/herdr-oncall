@@ -26,8 +26,6 @@ function upgradeEnvKeys(envPath) {
   let content = original;
   if (!/^NOTIFY_ON=/m.test(content)) {
     content = `${content.replace(/\s*$/, "")}\nNOTIFY_ON=${DEFAULT_NOTIFY_ON}\n`;
-  } else {
-    content = content.replace(/^NOTIFY_ON=\s*blocked\s*$/im, `NOTIFY_ON=${DEFAULT_NOTIFY_ON}`);
   }
   if (!/^BLOCKED_DELAY_SEC=/m.test(content)) {
     content = `${content.replace(/\s*$/, "")}\nBLOCKED_DELAY_SEC=60\n`;

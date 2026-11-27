@@ -224,7 +224,7 @@ test("seedConfigEnv copies example and a blank env into the config dir", () => {
     writeFileSync(envPath, "TELEGRAM_BOT_TOKEN=keep\nNOTIFY_ON=blocked\n");
     seedConfigEnv();
     assert.match(readFileSync(envPath, "utf8"), /TELEGRAM_BOT_TOKEN=keep/);
-    assert.match(readFileSync(envPath, "utf8"), /NOTIFY_ON=blocked,done/);
+    assert.match(readFileSync(envPath, "utf8"), /NOTIFY_ON=blocked/);
     assert.match(readFileSync(envPath, "utf8"), /BLOCKED_DELAY_SEC=60/);
     assert.match(readFileSync(join(dir, ".env.example"), "utf8"), /CHANNEL=telegram/);
   } finally {
