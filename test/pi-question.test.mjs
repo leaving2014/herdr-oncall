@@ -158,3 +158,44 @@ test("a multi-select Pi question accepts several option indexes", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("Pi card directory display is configurable and defaults to the folder name", async () => {
+  const previousState = process.env.HERDR_PLUGIN_STATE_DIR;
+  const previousMode = process.env.PI_QUESTION_DIR;
+  const dir = mkdtempSync(join(tmpdir(), "oncall-pi-dir-"));
+  process.env.HERDR_PLUGIN_STATE_DIR = dir;
+  try {
+    const cases = [
+      ["basename", "Pi · ai"],
+      ["home", "Pi · ~/ai"],
+      ["absolute", "Pi · /Users/leaving/ai"],
+      ["hidden", "Pi"],
+    ];
+    for (const [mode, expected] of cases) {
+      process.env.PI_QUESTION_DIR = mode;
+      let sent;
+      const result = await handlePiQuestion(
+        {
+          toolCallId: `call_dir_${mode}`,
+          cwd: "/Users/leaving/ai",
+          answerUrl: "http://127.0.0.1:4570/answer",
+          questions: [{ question: "测试", options: [{ label: "A" }] }],
+        },
+        {
+          ping: async (text) => {
+            sent = text;
+            return `om_dir_${mode}`;
+          },
+        },
+      );
+      assert.equal(result.ok, true);
+      assert.equal(sent.split("\n")[0], expected);
+    }
+  } finally {
+    if (previousState === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
+    else process.env.HERDR_PLUGIN_STATE_DIR = previousState;
+    if (previousMode === undefined) delete process.env.PI_QUESTION_DIR;
+    else process.env.PI_QUESTION_DIR = previousMode;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

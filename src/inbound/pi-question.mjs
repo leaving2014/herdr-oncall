@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { homedir } from "node:os";
+import { basename, join, sep } from "node:path";
 import { stateDir, writeFileAtomic } from "../lib/index.mjs";
 import { sendGatewayPing } from "../transport/gateway.mjs";
 
@@ -46,16 +47,31 @@ function forget(messageId) {
   write(store);
 }
 
-function textFor(questions, index) {
+function dirLabel(cwd) {
+  if (!cwd) return "";
+  const mode = (process.env.PI_QUESTION_DIR || "basename").trim().toLowerCase();
+  if (mode === "hidden" || mode === "off") return "";
+  const absolute = String(cwd);
+  if (mode === "absolute") return absolute;
+  if (mode === "home" || mode === "tilde") {
+    const home = homedir();
+    if (absolute === home) return "~";
+    if (absolute.startsWith(`${home}${sep}`)) return `~${absolute.slice(home.length)}`;
+  }
+  return basename(absolute);
+}
+
+function textFor(questions, index, meta = {}) {
   const question = questions[index];
   const progress = questions.length > 1 ? `第 ${index + 1} / ${questions.length} 题` : "";
-  return [progress, question.question, question.header ? `标签：${question.header}` : ""]
+  const agent = ["Pi", dirLabel(meta.cwd)].filter(Boolean).join(" · ");
+  return [agent, progress, question.question, question.header ? `标签：${question.header}` : ""]
     .filter(Boolean)
     .join("\n")
     .slice(0, MAX_QUESTION_TEXT);
 }
 
-async function sendCard(questions, index, deps = {}) {
+async function sendCard(questions, index, deps = {}, meta = {}) {
   const question = questions[index];
   const options = question.options.map((option, optionIndex) => ({
     key: String(optionIndex + 1),
@@ -67,7 +83,7 @@ async function sendCard(questions, index, deps = {}) {
   const send =
     deps.ping ??
     (async (text, { options }) => (await sendGatewayPing({ text, status: "blocked", options })).messageId);
-  return send(textFor(questions, index), { options });
+  return send(textFor(questions, index, meta), { options });
 }
 
 // The Pi extension posts a prompt event here. A questionnaire is answered one
@@ -93,7 +109,8 @@ export async function handlePiQuestion(payload, deps = {}) {
     return { ok: false, reason: "bad-answer-url" };
   }
 
-  const messageId = await sendCard(questions, 0, deps);
+  const meta = { cwd: String(payload?.cwd ?? ""), agent: "pi" };
+  const messageId = await sendCard(questions, 0, deps, meta);
   if (!messageId) {
     return { ok: false, reason: "ping-failed" };
   }
@@ -105,6 +122,8 @@ export async function handlePiQuestion(payload, deps = {}) {
     questionIndex: 0,
     questions,
     answers: [],
+    agent: meta.agent,
+    cwd: meta.cwd,
     paneId: String(payload?.paneId ?? ""),
     at: Date.now(),
   });
@@ -159,7 +178,10 @@ export async function answerPiQuestion(messageId, actionKey, text, deps = {}) {
   if (nextIndex < record.questions.length) {
     let nextMessageId;
     try {
-      nextMessageId = await sendCard(record.questions, nextIndex, deps);
+      nextMessageId = await sendCard(record.questions, nextIndex, deps, {
+        agent: record.agent,
+        cwd: record.cwd,
+      });
     } catch (error) {
       return { ok: false, reason: `next-card-failed: ${error?.message || String(error)}` };
     }
