@@ -61,6 +61,17 @@ test("an OMP form at its note step still gets a Submit button", () => {
     { key: "1", send: "keys:enter", label: "直接提交", submitOnly: true },
   ]);
   assert.equal(screenHasOpenMenu(noteOnly), true);
+  const previous = process.env.OMP_ASK_SCOPE;
+  process.env.OMP_ASK_SCOPE = "current";
+  try {
+    const snippet = blockedSnippet(noteOnly);
+    assert.match(snippet, /^当前问题：第 2 题 \/ 共 2 题/m);
+    assert.match(snippet, /要补充的话/);
+    assert.doesNotMatch(snippet, /接下来要我先做哪一步/);
+  } finally {
+    if (previous === undefined) delete process.env.OMP_ASK_SCOPE;
+    else process.env.OMP_ASK_SCOPE = previous;
+  }
 });
 
 test("a checkbox question turns into toggle buttons", () => {
@@ -84,7 +95,7 @@ test("a checkbox question turns into toggle buttons", () => {
 });
 
 test("a multi-question OMP form stays live", () => {
-  const multi = `╭─ Ask · 2 of 6 answered ─────────────────────────────╮
+  const multi = `╭─ Ask · 1 of 6 answered ─────────────────────────────╮
 │ 纯闲聊，几个问题，随手点就行。                      │
 │ ✓ 最喜欢的颜色                                      │
 │    ✓ 蓝色   绿色   黑/灰   暖色系                   │
@@ -107,6 +118,20 @@ test("a multi-question OMP form stays live", () => {
     parseBlockedOptions(multi).map(({ label }) => label),
     ["主要是看比赛", "跑步 / 徒步", "Other: type your own"],
   );
+  const previous = process.env.OMP_ASK_SCOPE;
+  process.env.OMP_ASK_SCOPE = "current";
+  try {
+    const snippet = blockedSnippet(multi);
+    assert.match(snippet, /^当前问题：第 2 题 \/ 共 6 题/m);
+    assert.match(snippet, /运动偏好/);
+    assert.match(snippet, /主要是看比赛/);
+    assert.doesNotMatch(snippet, /最喜欢的颜色/);
+    assert.doesNotMatch(snippet, /理想的周末/);
+    assert.doesNotMatch(snippet, /一天里状态最好的时段/);
+  } finally {
+    if (previous === undefined) delete process.env.OMP_ASK_SCOPE;
+    else process.env.OMP_ASK_SCOPE = previous;
+  }
 });
 
 test("an OMP form whose title scrolled off still parses", () => {

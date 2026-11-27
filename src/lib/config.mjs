@@ -5,6 +5,7 @@ import { writeFileAtomic } from "./atomic.mjs";
 import { configDirPath, pluginRoot, stateDir } from "./paths.mjs";
 
 export const DEFAULT_NOTIFY_ON = "blocked,done";
+export const DEFAULT_OMP_ASK_SCOPE = "current";
 
 export function seedConfigEnv() {
   const dir = configDirPath();
@@ -29,6 +30,9 @@ function upgradeEnvKeys(envPath) {
   }
   if (!/^BLOCKED_DELAY_SEC=/m.test(content)) {
     content = `${content.replace(/\s*$/, "")}\nBLOCKED_DELAY_SEC=60\n`;
+  }
+  if (!/^OMP_ASK_SCOPE=/m.test(content)) {
+    content = `${content.replace(/\s*$/, "")}\nOMP_ASK_SCOPE=${DEFAULT_OMP_ASK_SCOPE}\n`;
   }
   if (content !== original) {
     writeFileSync(envPath, content, "utf8");

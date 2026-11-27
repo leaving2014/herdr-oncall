@@ -56,7 +56,8 @@ export function blockedSnippet(screen, limit = 24) {
   const lines = screenLines(screen);
   const region = dialogRegion(lines);
   if (region?.omp) {
-    return capSnippet(renderOmpBlock(lines, region));
+    const scope = (process.env.OMP_ASK_SCOPE || "all").trim().toLowerCase();
+    return capSnippet(scope === "current" ? renderOmpCurrent(lines, region) : renderOmpBlock(lines, region));
   }
   const slice = region
     ? lines.slice(region.start, region.end)
@@ -295,9 +296,89 @@ function ompFormRegion(lines) {
     start,
     header: header < 0 ? start : header,
     optionStart: optionStart < 0 ? submit : optionStart,
+    optionEnd,
     end: submit,
     options: options.slice(0, 9),
   };
+}
+
+// The live form is one viewport. When the reader only needs the question waiting
+// for an answer, print its progress line and the open question instead of the
+// whole form; answered and folded questions are the noise this avoids.
+function renderOmpCurrent(lines, region) {
+  const out = [];
+  const header = region.header >= 0 ? ompLineText(lines[region.header]) : "";
+  const progress = /Ask\s*[·•]\s*(\d+)\s+of\s+(\d+)/i.exec(header);
+  if (progress) {
+    // OMP's header counts answered questions. The open one is the next
+    // unanswered question, capped for the note step after the last answer.
+    const answered = Number(progress[1]);
+    const total = Number(progress[2]);
+    const current = Math.min(answered + 1, total);
+    out.push(`当前问题：第 ${current} 题 / 共 ${total} 题`);
+  }
+
+  const start = ompCurrentStart(lines, region);
+  const end = ompCurrentEnd(lines, region, start);
+  for (let i = start; i < end; i++) {
+    const text = ompLineText(lines[i]);
+    if (!text) {
+      if (out.length && out.at(-1) !== "") {
+        out.push("");
+      }
+      continue;
+    }
+    out.push(text);
+  }
+  while (out.length && out.at(-1) === "") {
+    out.pop();
+  }
+  return out.join("\n").trim();
+}
+
+function ompCurrentStart(lines, region) {
+  if (region.optionEnd >= region.optionStart) {
+    // The open question's label sits immediately above its choices. A folded
+    // `✓ ...` row above it belongs to an earlier question and must not come
+    // along.
+    let i = region.optionStart - 1;
+    while (i > region.start && isBlank(ompLineText(lines[i]))) {
+      i -= 1;
+    }
+    if (
+      i > region.start &&
+      !ompOptionAt(lines[i]) &&
+      !/^\s*[✓✔☑☒]/.test(ompInnerText(lines[i]))
+    ) {
+      return i;
+    }
+    return region.optionStart;
+  }
+  // A text-only question is the row carrying OMP's cursor below the folded
+  // questions; its field and Submit run down to the next folded question.
+  for (let i = region.end - 1; i >= region.start; i--) {
+    if (ompInnerText(lines[i]).includes("❯")) {
+      return i;
+    }
+  }
+  return region.start;
+}
+
+function ompCurrentEnd(lines, region, start) {
+  if (region.optionEnd >= region.optionStart) {
+    return region.optionEnd + 1;
+  }
+  for (let i = start + 1; i < region.end; i++) {
+    const inner = ompInnerText(lines[i]);
+    const text = ompLineText(lines[i]);
+    if (/^\s{0,1}[○◉☐☑]\s+/.test(inner) && !inner.includes("❯")) {
+      return i;
+    }
+    if (/^(?:[❯›▸>]\s*)?Submit\b/i.test(text)) {
+      return i;
+    }
+  }
+  return region.end;
 }
 
 function renderOmpBlock(lines, region) {
