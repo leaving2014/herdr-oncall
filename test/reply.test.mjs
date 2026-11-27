@@ -376,7 +376,7 @@ test("the same fallback still delivers when the dialog matches", () => {
   assert.equal(herdrFailed(result), false);
   assert.ok(calls.includes("agent prompt w8:p1 keep going"), calls.join("\n"));
   assert.deepEqual(calls.slice(-3), [
-    "pane send-keys w8:p1 end ctrl+u",
+    "pane send-keys w8:p1 ctrl+e ctrl+u",
     "pane send-text w8:p1 keep going",
     "pane send-keys w8:p1 enter",
   ]);

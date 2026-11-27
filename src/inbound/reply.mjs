@@ -490,7 +490,7 @@ export function deliverReply(paneId, text, fallbackStatus, options = {}) {
   if (plan.mode === "noop") {
     return { status: 0 };
   }
-  const clearInput = () => run(["pane", "send-keys", paneId, "end", "ctrl+u"]);
+  const clearInput = () => run(["pane", "send-keys", paneId, "ctrl+e", "ctrl+u"]);
   if (plan.mode === "keys-text") {
     const keyed = run(["pane", "send-keys", paneId, ...plan.keys]);
     if (herdrFailed(keyed)) {
