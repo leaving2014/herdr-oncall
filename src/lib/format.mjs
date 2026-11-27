@@ -190,7 +190,7 @@ function ompInnerText(raw) {
 
 function ompOptionAt(line) {
   const text = ompInnerText(line);
-  const match = text.match(/^(\s*)(?:(❯|›|▸|>)\s*)?([◉○●⚪])\s+(.+)$/u);
+  const match = text.match(/^(\s*)(?:(❯|›|▸|>)\s*)?([◉○●⚪☐☑☒])\s+(.+)$/u);
   if (!match) {
     return undefined;
   }
@@ -202,7 +202,8 @@ function ompOptionAt(line) {
   }
   return {
     cursor,
-    selected: /[◉●]/.test(match[3]),
+    multi: /[☐☑☒]/.test(match[3]),
+    selected: /[◉●☑☒]/.test(match[3]),
     label: match[4].trim(),
   };
 }
@@ -263,6 +264,7 @@ function ompFormRegion(lines) {
     }
   }
   const cursor = Math.max(0, raw.findIndex((option) => option.cursor));
+  const multi = raw.some((option) => option.multi);
   const total = Number(/of\s+(\d+)\s+answered/i.exec(ompLineText(lines[header] ?? ""))?.[1] ?? 1);
   const options = [];
   for (const [index, option] of raw.entries()) {
@@ -270,10 +272,14 @@ function ompFormRegion(lines) {
     for (let step = 0; step < Math.abs(index - cursor); step += 1) {
       keys.push(index > cursor ? "down" : "up");
     }
-    // A one-question form submits on Enter, so its choices only move the
-    // cursor; Submit presses Enter. A longer form needs Enter to advance from
-    // the choice question to the note the card's input fills.
-    if (total > 1) {
+    const other = /^Other\b/i.test(option.label);
+    if (multi) {
+      // Checkboxes toggle with Space and stay put; Submit presses Enter to
+      // advance. This lets several card taps pick several values.
+      keys.push("space");
+    } else if (total > 1) {
+      // A longer form needs Enter to advance from the choice question to the
+      // note the card's input fills.
       keys.push("enter");
     }
     options.push({

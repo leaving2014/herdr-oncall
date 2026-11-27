@@ -63,6 +63,26 @@ test("an OMP form at its note step still gets a Submit button", () => {
   assert.equal(screenHasOpenMenu(noteOnly), true);
 });
 
+test("a checkbox question turns into toggle buttons", () => {
+  const drinks = `╭─ Ask · 4 of 6 answered ─────────────────────────────╮
+│ 喝的                                                │
+│ ❯ ☐ 咖啡                                           │
+│   ☐ 茶                                              │
+│   ☐ Other: type your own                            │
+│   Submit                                            │
+╰─────────────────────────────────────────────────────╯
+  󱊷 Asking several personal small-talk questions
+`;
+  assert.deepEqual(
+    parseBlockedOptions(drinks).map(({ label, send }) => ({ label, send })),
+    [
+      { label: "咖啡", send: "keys:space" },
+      { label: "茶", send: "keys:down,space" },
+      { label: "Other: type your own", send: "keys:down,down,space" },
+    ],
+  );
+});
+
 test("a multi-question OMP form stays live", () => {
   const multi = `╭─ Ask · 2 of 6 answered ─────────────────────────────╮
 │ 纯闲聊，几个问题，随手点就行。                      │
