@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join, sep } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 import { stateDir, writeFileAtomic } from "../lib/index.mjs";
 import { sendGatewayPing } from "../transport/gateway.mjs";
 
@@ -91,22 +91,19 @@ async function sendCard(questions, index, deps = {}, meta = {}) {
 // answer is posted back as one complete rpiv:ask-user:answer payload.
 export async function handlePiQuestion(payload, deps = {}) {
   const toolCallId = String(payload?.toolCallId ?? "").trim();
-  const answerUrl = String(payload?.answerUrl ?? "").trim();
+  const answerMailbox = String(payload?.answerMailbox ?? "").trim();
   const questions = Array.isArray(payload?.questions) ? payload.questions : [];
-  if (!toolCallId || !answerUrl || questions.length < 1) {
+  if (!toolCallId || !answerMailbox || questions.length < 1) {
     return { ok: false, reason: "bad-question" };
   }
   const question = questions[0];
   if (!question || typeof question.question !== "string" || !Array.isArray(question.options)) {
     return { ok: false, reason: "bad-question" };
   }
-  try {
-    const url = new URL(answerUrl);
-    if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "::1"].includes(url.hostname)) {
-      return { ok: false, reason: "answer-url-not-local" };
-    }
-  } catch {
-    return { ok: false, reason: "bad-answer-url" };
+  const mailboxRoot = join(stateDir(), "pi-answers");
+  const mailbox = resolve(answerMailbox);
+  if (mailbox !== mailboxRoot && !mailbox.startsWith(`${mailboxRoot}${sep}`)) {
+    return { ok: false, reason: "answer-mailbox-outside-state" };
   }
 
   const meta = { cwd: String(payload?.cwd ?? ""), agent: "pi" };
@@ -117,8 +114,7 @@ export async function handlePiQuestion(payload, deps = {}) {
   remember({
     messageId,
     toolCallId,
-    answerUrl,
-    answerToken: payload?.answerToken ? String(payload.answerToken) : undefined,
+    answerMailbox: mailbox,
     questionIndex: 0,
     questions,
     answers: [],
@@ -201,25 +197,14 @@ export async function answerPiQuestion(messageId, actionKey, text, deps = {}) {
     return { ok: true, result: "next", messageId: nextMessageId };
   }
 
-  const headers = { "content-type": "application/json" };
-  if (record.answerToken) {
-    headers.authorization = `Bearer ${record.answerToken}`;
-  }
   try {
-    const response = await (deps.fetchImpl ?? fetch)(record.answerUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        toolCallId: record.toolCallId,
-        answers,
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) {
-      return { ok: false, reason: `answer-http-${response.status}` };
-    }
+    mkdirSync(record.answerMailbox, { recursive: true });
+    writeFileAtomic(
+      join(record.answerMailbox, `${encodeURIComponent(record.toolCallId)}.json`),
+      JSON.stringify({ toolCallId: record.toolCallId, answers }),
+    );
   } catch (error) {
-    return { ok: false, reason: `answer-failed: ${error?.message || String(error)}` };
+    return { ok: false, reason: `answer-write-failed: ${error?.message || String(error)}` };
   }
   forget(messageId);
   return { ok: true, result: "answered" };

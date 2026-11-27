@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -15,8 +15,7 @@ test("a Pi prompt becomes a card and a chosen option goes back as an answer", as
       {
         toolCallId: "call_123",
         paneId: "w1:p1",
-        answerUrl: "http://127.0.0.1:4567/answer",
-        answerToken: "local-token",
+        answerMailbox: join(dir, "pi-answers", "first"),
         questions: [
           {
             question: "选哪一个？",
@@ -47,17 +46,9 @@ test("a Pi prompt becomes a card and a chosen option goes back as an answer", as
     );
     assert.equal(lookupPiQuestion("om_pi_card").toolCallId, "call_123");
 
-    let posted;
-    const answered = await answerPiQuestion("om_pi_card", "", "piopt:0:1", {
-      fetchImpl: async (url, options) => {
-        posted = { url, options };
-        return { ok: true, status: 200 };
-      },
-    });
+    const answered = await answerPiQuestion("om_pi_card", "", "piopt:0:1");
     assert.deepEqual(answered, { ok: true, result: "answered" });
-    assert.equal(posted.url, "http://127.0.0.1:4567/answer");
-    assert.equal(posted.options.headers.authorization, "Bearer local-token");
-    assert.deepEqual(JSON.parse(posted.options.body), {
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, "pi-answers", "first", "call_123.json"), "utf8")), {
       toolCallId: "call_123",
       answers: [{ questionIndex: 0, optionIndexes: [1] }],
     });
@@ -85,7 +76,7 @@ test("a multi-question Pi prompt advances one card at a time", async () => {
       { question: "第二题？", header: "二", multiSelect: false, options: [{ label: "C" }, { label: "D" }] },
     ];
     const first = await handlePiQuestion(
-      { toolCallId: "call_multi", answerUrl: "http://127.0.0.1:4568/answer", questions },
+      { toolCallId: "call_multi", answerMailbox: join(dir, "pi-answers", "multi"), questions },
       { ping: reply },
     );
     assert.equal(first.messageId, "om_1");
@@ -95,19 +86,15 @@ test("a multi-question Pi prompt advances one card at a time", async () => {
     assert.match(sent[1].text, /第 2 \/ 2 题/);
     assert.equal(sent[1].options[0].send, "piopt:1:0");
 
-    let posted;
-    const done = await answerPiQuestion("om_2", "piopt:1:1", "", {
-      ping: reply,
-      fetchImpl: async (url, options) => {
-        posted = { url, options };
-        return { ok: true, status: 200 };
-      },
-    });
+    const done = await answerPiQuestion("om_2", "piopt:1:1", "", { ping: reply });
     assert.deepEqual(done, { ok: true, result: "answered" });
-    assert.deepEqual(JSON.parse(posted.options.body).answers, [
-      { questionIndex: 0, optionIndexes: [0] },
-      { questionIndex: 1, optionIndexes: [1] },
-    ]);
+    assert.deepEqual(
+      JSON.parse(readFileSync(join(dir, "pi-answers", "multi", "call_multi.json"), "utf8")).answers,
+      [
+        { questionIndex: 0, optionIndexes: [0] },
+        { questionIndex: 1, optionIndexes: [1] },
+      ],
+    );
   } finally {
     if (previous === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
     else process.env.HERDR_PLUGIN_STATE_DIR = previous;
@@ -121,7 +108,6 @@ test("a multi-select Pi question accepts several option indexes", async () => {
   process.env.HERDR_PLUGIN_STATE_DIR = dir;
   try {
     let sent;
-    let posted;
     const questions = [
       {
         question: "选哪些？",
@@ -131,7 +117,7 @@ test("a multi-select Pi question accepts several option indexes", async () => {
       },
     ];
     const first = await handlePiQuestion(
-      { toolCallId: "call_checkbox", answerUrl: "http://127.0.0.1:4569/answer", questions },
+      { toolCallId: "call_checkbox", answerMailbox: join(dir, "pi-answers", "checkbox"), questions },
       {
         ping: async (text, { options }) => {
           sent = { text, options };
@@ -145,13 +131,12 @@ test("a multi-select Pi question accepts several option indexes", async () => {
       { multi: true, cursor: 0 },
       { multi: true, cursor: 0 },
     ]);
-    await answerPiQuestion("om_checkbox", "multi:0:0,2", "", {
-      fetchImpl: async (url, options) => {
-        posted = JSON.parse(options.body);
-        return { ok: true, status: 200 };
-      },
-    });
-    assert.deepEqual(posted.answers, [{ questionIndex: 0, optionIndexes: [0, 2] }]);
+    const answered = await answerPiQuestion("om_checkbox", "multi:0:0,2", "");
+    assert.deepEqual(answered, { ok: true, result: "answered" });
+    assert.deepEqual(
+      JSON.parse(readFileSync(join(dir, "pi-answers", "checkbox", "call_checkbox.json"), "utf8")).answers,
+      [{ questionIndex: 0, optionIndexes: [0, 2] }],
+    );
   } finally {
     if (previous === undefined) delete process.env.HERDR_PLUGIN_STATE_DIR;
     else process.env.HERDR_PLUGIN_STATE_DIR = previous;
@@ -178,7 +163,7 @@ test("Pi card directory display is configurable and defaults to the folder name"
         {
           toolCallId: `call_dir_${mode}`,
           cwd: "/Users/leaving/ai",
-          answerUrl: "http://127.0.0.1:4570/answer",
+          answerMailbox: join(dir, "pi-answers", `dir-${mode}`),
           questions: [{ question: "测试", options: [{ label: "A" }] }],
         },
         {
