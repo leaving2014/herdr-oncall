@@ -22,6 +22,7 @@ import {
   nextDialog,
   ompFormComplete,
   ompFormSummary,
+  ompSelectOptions,
   openPanelFor,
   optionKeyboard,
   ownedElsewhere,
@@ -789,7 +790,7 @@ async function answerStale(target, result, deps) {
   // the card it points to.
   await ack(`弹框变了，没按 · ${where}\n已换成下面这张新卡片`);
   const title = target.title || statusTitle({}, {}, "blocked");
-  const options = dialogChoices(screen);
+  const options = dialogChoices(screen, { selectOptions: ompSelectOptions(target.paneId, screen, { run }) });
   let body = dialog?.body;
   if (!body) {
     saveScreen("last-blocked-screen.txt", screen);
@@ -868,7 +869,9 @@ async function followForm(target, answered, deps) {
     return true;
   }
   const title = target.title || statusTitle({}, {}, "blocked");
-  const options = dialogChoices(next.screen);
+  const options = dialogChoices(next.screen, {
+    selectOptions: ompSelectOptions(target.paneId, next.screen, { run }),
+  });
   let body = sessionDialogBody(target.paneId, next.screen, { run });
   if (!body) {
     saveScreen("last-blocked-screen.txt", next.screen);

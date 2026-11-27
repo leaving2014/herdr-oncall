@@ -310,11 +310,11 @@ function renderOmpCurrent(lines, region) {
   const header = region.header >= 0 ? ompLineText(lines[region.header]) : "";
   const progress = /Ask\s*[·•]\s*(\d+)\s+of\s+(\d+)/i.exec(header);
   if (progress) {
-    // OMP's header counts answered questions. The open one is the next
-    // unanswered question, capped for the note step after the last answer.
-    const answered = Number(progress[1]);
+    // OMP numbers the open question in this header ("Ask · 6 of 7" while the
+    // sixth question is focused); the word "answered" is not a count of the
+    // rows already behind it.
     const total = Number(progress[2]);
-    const current = Math.min(answered + 1, total);
+    const current = Math.min(Number(progress[1]), total);
     out.push(`当前问题：第 ${current} 题 / 共 ${total} 题`);
   }
 
@@ -396,7 +396,9 @@ export function ompFormComplete(screen) {
   if (!progress || Number(progress[1]) < Number(progress[2])) {
     return false;
   }
-  return region.optionStart === region.end;
+  // "6 of 6" can also be the last question still open. Only a focused Submit
+  // row means the form is finished.
+  return region.optionStart === region.end && /^\s*[❯›▸>]\s*Submit\b/i.test(ompInnerText(lines[region.end]));
 }
 
 // An OMP question with no choices is an input field, not a key menu. A single
@@ -405,7 +407,7 @@ export function ompFormComplete(screen) {
 export function dialogHasTextInput(screen) {
   const lines = screenLines(screen);
   const region = ompFormRegion(lines);
-  if (!region?.omp || ompFormComplete(screen)) {
+  if (!region?.omp || ompFormComplete(screen) || parseOmpDropdown(screen)) {
     return false;
   }
   return region.optionStart === region.end;
@@ -1233,12 +1235,56 @@ function readOptions(screen) {
   return [];
 }
 
+// OMP's select/dropdown control draws one option at a time:
+//   │ ‹ 家附近转转，半天来回 ›  1/4
+// Left/right change the selection; Enter advances. The full option list is in
+// the agent's ask call, not on screen (see ompSelectOptions in transcript.mjs).
+export function parseOmpDropdown(screen) {
+  const lines = screenLines(screen);
+  const region = ompFormRegion(lines);
+  if (!region?.omp) {
+    return undefined;
+  }
+  for (let i = region.start; i < region.end; i++) {
+    const inner = ompInnerText(lines[i]);
+    const match = /‹\s*(.+?)\s*›\s*(\d+)\s*\/\s*(\d+)/u.exec(inner);
+    if (match) {
+      return {
+        label: match[1].trim(),
+        current: Number(match[2]),
+        total: Number(match[3]),
+      };
+    }
+  }
+  return undefined;
+}
+
 // The one gate for every set of buttons we offer, Telegram and desktop panel
 // alike. A hook-authoritative block has no menu drawn at all, so the y/n
 // fallback above would happily put buttons on an agent that is waiting for free
 // text — and a tap would send a keystroke it never asked for.
-export function dialogChoices(screen, { hookAuthoritative = false } = {}) {
-  return hookAuthoritative ? [] : parseBlockedOptions(screen);
+export function dialogChoices(screen, { hookAuthoritative = false, selectOptions } = {}) {
+  if (hookAuthoritative) {
+    return [];
+  }
+  const dropdown = selectOptions && parseOmpDropdown(screen);
+  if (dropdown && selectOptions.labels?.length) {
+    const current = Math.max(0, Math.min(dropdown.current - 1, selectOptions.labels.length - 1));
+    return selectOptions.labels.slice(0, 9).map((label, index) => {
+      const keys = [];
+      for (let step = 0; step < Math.abs(index - current); step++) {
+        keys.push(index > current ? "right" : "left");
+      }
+      keys.push("enter");
+      return {
+        key: String(index + 1),
+        send: `keys:${keys.join(",")}`,
+        label: label.slice(0, 96),
+        whole: label,
+      };
+    });
+  }
+  return parseBlockedOptions(screen);
 }
 
 // A trailing parenthetical is a keystroke only when it names one. The old

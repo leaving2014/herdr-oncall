@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   blockedSnippet,
+  dialogChoices,
   dialogFingerprint,
   dialogHasTextInput,
   dialogQuestion,
   ompFormComplete,
   ompFormSummary,
+  parseOmpDropdown,
   parseBlockedOptions,
   screenHasLiveDialog,
   screenHasOpenMenu,
@@ -53,7 +55,7 @@ test("OMP form snippet starts at the header and stops before Submit", () => {
 });
 
 test("an OMP form at its note step still gets a Submit button", () => {
-  const noteOnly = `╭─ Ask · 1 of 2 answered ─────────────────────────────╮
+  const noteOnly = `╭─ Ask · 2 of 2 answered ─────────────────────────────╮
 │ ✓ 接下来要我先做哪一步？                            │
 │ ❯ 要补充的话（可留空）                              │
 │   │ ▏                                                │
@@ -98,7 +100,7 @@ test("a checkbox question turns into toggle buttons", () => {
 });
 
 test("a multi-question OMP form stays live", () => {
-  const multi = `╭─ Ask · 1 of 6 answered ─────────────────────────────╮
+  const multi = `╭─ Ask · 2 of 6 answered ─────────────────────────────╮
 │ 纯闲聊，几个问题，随手点就行。                      │
 │ ✓ 最喜欢的颜色                                      │
 │    ✓ 蓝色   绿色   黑/灰   暖色系                   │
@@ -222,4 +224,37 @@ test("a choice-less OMP question is a text input, not a key menu", () => {
 `;
   assert.equal(dialogHasTextInput(numeric), true);
   assert.equal(dialogHasTextInput(screen), false);
+});
+
+test("an OMP dropdown lists all options from its ask schema", () => {
+  const dropdown = `╭─ Ask · 6 of 7 answered ─────────────────────────────╮
+│ ✓ 数字：工作日平均睡几小时                          │
+│   10                                                │
+│ ❯ 下拉：想出去放松的话，倾向哪种                    │
+│   │ ‹ 家附近转转，半天来回 ›  1/4                    │
+│ ○ 长填空：随便说说（可留空）                        │
+│   工作                                              │
+│   Submit                                            │
+╰─────────────────────────────────────────────────────╯
+`;
+  assert.deepEqual(parseOmpDropdown(dropdown), {
+    label: "家附近转转，半天来回",
+    current: 1,
+    total: 4,
+  });
+  const choices = dialogChoices(dropdown, {
+    selectOptions: {
+      labels: ["家附近转转，半天来回", "邻市，住一晚", "远一点，长假才动", "其实不太想出门"],
+      currentIndex: 0,
+    },
+  });
+  assert.deepEqual(
+    choices.map(({ key, label, send }) => ({ key, label, send })),
+    [
+      { key: "1", label: "家附近转转，半天来回", send: "keys:enter" },
+      { key: "2", label: "邻市，住一晚", send: "keys:right,enter" },
+      { key: "3", label: "远一点，长假才动", send: "keys:right,right,enter" },
+      { key: "4", label: "其实不太想出门", send: "keys:right,right,right,enter" },
+    ],
+  );
 });

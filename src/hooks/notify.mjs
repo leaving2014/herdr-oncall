@@ -29,6 +29,7 @@ import {
   nextDialog,
   ompFormComplete,
   ompFormSummary,
+  ompSelectOptions,
   notOwnerReason,
   notifyPlan,
   ownership,
@@ -398,7 +399,10 @@ async function pingRemote(screen, doneBody, { replyTo } = {}) {
   // A hook-authoritative block has no menu on screen: nothing to put on buttons
   // and nothing to fingerprint, so the reply comes back as free text.
   const dialogBacked = status === "blocked" && !hookAuthoritative;
-  const options = dialogChoices(screen, { hookAuthoritative: !dialogBacked });
+  const options = dialogChoices(screen, {
+    hookAuthoritative: !dialogBacked,
+    selectOptions: ompSelectOptions(paneId, screen),
+  });
   const fingerprint = dialogBacked ? dialogFingerprint(screen) : undefined;
   const call = dialogBacked ? dialogCall(screen) : undefined;
   // With drover, the main session's own dialog reads "主会话在等你确认" and
@@ -503,7 +507,10 @@ if (status === "blocked") {
   const delayMs = blockedDelayMs();
   // The panel gets the same gate as the chat ping: no menu on screen means
   // no buttons anywhere, only free text.
-  const panelOptions = dialogChoices(screen, { hookAuthoritative });
+  const panelOptions = dialogChoices(screen, {
+    hookAuthoritative,
+    selectOptions: ompSelectOptions(paneId, screen),
+  });
   const fingerprint = hookAuthoritative ? undefined : dialogFingerprint(screen);
   const call = dialogCall(screen);
   // Herdr can report `blocked` again for a dialog that never went away (seen:
@@ -598,7 +605,12 @@ async function followPanel(first, timeoutMs) {
       }
       const screen = lastStale.screen;
       console.log(`panel follows on · ${where} · showing the dialog that is up now`);
-      live = { screen, options: dialogChoices(screen), fingerprint: dialogFingerprint(screen), call: dialogCall(screen) };
+      live = {
+        screen,
+        options: dialogChoices(screen, { selectOptions: ompSelectOptions(paneId, screen) }),
+        fingerprint: dialogFingerprint(screen),
+        call: dialogCall(screen),
+      };
       continue;
     }
     if (outcome !== "handled" || hookAuthoritative) {
@@ -619,7 +631,10 @@ async function followPanel(first, timeoutMs) {
     console.log(`panel follows on · ${where}`);
     live = {
       screen: next.screen,
-      options: dialogChoices(next.screen, { hookAuthoritative: false }),
+      options: dialogChoices(next.screen, {
+        hookAuthoritative: false,
+        selectOptions: ompSelectOptions(paneId, next.screen),
+      }),
       fingerprint: next.fingerprint,
       call: dialogCall(next.screen),
     };

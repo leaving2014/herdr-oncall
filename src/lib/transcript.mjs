@@ -2,7 +2,7 @@ import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync, rea
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { envFlag } from "./config.mjs";
-import { blockedSnippet, dialogQuestion } from "./format.mjs";
+import { blockedSnippet, dialogQuestion, parseOmpDropdown } from "./format.mjs";
 import { runHerdr, sleep } from "./paths.mjs";
 
 // A done ping carries the agent's last answer, and the agent's own session
@@ -766,6 +766,92 @@ export function describeCall(agent, call) {
     }
   }
   return [];
+}
+
+
+// OMP's TUI shows only one row of a select: `‹ option ›  2/4`. The full
+// choices and their order live in the ask call that opened the form, so read
+// them there instead of pressing left/right across the live form to discover
+// them. Returns undefined when the session is unavailable or the screen is not
+// a dropdown, leaving the normal screen-derived card path in place.
+export function ompSelectOptions(paneId, screen, { run = runHerdr, env = process.env } = {}) {
+  const dropdown = parseOmpDropdown(screen);
+  if (!dropdown) {
+    return undefined;
+  }
+  const session = paneSession(paneId, { run, env });
+  const path = sessionFile(session, env);
+  if (!path) {
+    return undefined;
+  }
+  const records = readSessionTail(path);
+  for (let i = records.length - 1; i >= 0; i--) {
+    const content = records[i]?.message?.content;
+    if (!Array.isArray(content)) {
+      continue;
+    }
+    for (const block of content) {
+      if (block?.type !== "toolCall" || block.name !== "ask") {
+        continue;
+      }
+      const html = block.arguments?.html;
+      if (typeof html !== "string") {
+        continue;
+      }
+      const selects = htmlSelectOptions(html);
+      if (!selects.length) {
+        continue;
+      }
+      const current = normalizeHtmlText(dropdown.label);
+      for (const labels of selects) {
+        if (labels.length !== dropdown.total) {
+          continue;
+        }
+        const matches = labels.some((label) => {
+          const normalized = normalizeHtmlText(label);
+          return (
+            normalized === current ||
+            normalized.startsWith(current) ||
+            current.startsWith(normalized)
+          );
+        });
+        if (matches || selects.length === 1) {
+          return { labels, currentIndex: Math.max(0, dropdown.current - 1) };
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+function htmlSelectOptions(html) {
+  const selects = [];
+  for (const select of String(html).matchAll(/<select\b[^>]*>([\s\S]*?)<\/select>/gi)) {
+    const labels = [];
+    for (const option of select[1].matchAll(/<option\b[^>]*>([\s\S]*?)<\/option>/gi)) {
+      const label = normalizeHtmlText(option[1]);
+      if (label) {
+        labels.push(label);
+      }
+    }
+    if (labels.length) {
+      selects.push(labels);
+    }
+  }
+  return selects;
+}
+
+function normalizeHtmlText(raw) {
+  return String(raw)
+    .replace(/<[^>]*>/g, "")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // Text compared with every space, line break, Markdown mark and box-drawing
