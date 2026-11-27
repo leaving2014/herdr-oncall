@@ -1007,11 +1007,12 @@ function splitShortcut(raw) {
 }
 
 export function parseBlockedOptions(screen) {
-  return readOptions(screen).map(({ key, send, label, multi, cursor }) => ({
+  return readOptions(screen).map(({ key, send, label, multi, cursor, submitOnly }) => ({
     key,
     send,
     label,
     ...(multi ? { multi: true, cursor } : {}),
+    ...(submitOnly ? { submitOnly: true } : {}),
   }));
 }
 
@@ -1025,7 +1026,13 @@ function readOptions(screen) {
     // still needs a card: the input and Submit are the only way to finish it.
     return region.options.length
       ? region.options
-      : [{ key: "1", send: "keys:enter", label: "直接提交", whole: "直接提交" }];
+      : [{
+          key: "1",
+          send: "keys:enter",
+          label: "直接提交",
+          whole: "直接提交",
+          submitOnly: true,
+        }];
   }
   // Only the choices under this question. Numbered lines elsewhere on screen
   // are earlier chat messages, not options.
