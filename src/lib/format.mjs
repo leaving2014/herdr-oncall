@@ -226,11 +226,6 @@ function ompFormRegion(lines) {
   const cursor = Math.max(0, raw.findIndex((option) => option.cursor));
   const options = [];
   for (const [index, option] of raw.entries()) {
-    // The form's own "type your own" row opens an editor that a card cannot
-    // type into; a button for it would look usable and leave the form open.
-    if (/^(?:Other\b|type your own)/i.test(option.label)) {
-      continue;
-    }
     const keys = [];
     for (let step = 0; step < Math.abs(index - cursor); step += 1) {
       keys.push(index > cursor ? "down" : "up");
