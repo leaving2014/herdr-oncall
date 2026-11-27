@@ -75,22 +75,28 @@ export function classifyDelivery(liveStatus, text) {
   const status = String(liveStatus || "").toLowerCase();
   const value = String(text ?? "").trim();
   if (status === "blocked") {
-    // A multi-select card sends the chosen indexes and the cursor position.
-    // Turn them into cursor moves, Space toggles, and a final Enter.
-    const multi = /^multi:(\d+):(.*)$/i.exec(value);
-    if (multi) {
-      const cursor = Math.max(0, Number(multi[1]) || 0);
+    // A multi-select card sends chosen indexes and the cursor position. With
+    // Other filled, it also carries that option's index and the typed text.
+    const parts = value.split(":");
+    if (parts.length >= 3 && parts[0].toLowerCase() === "multi") {
+      const cursor = Math.max(0, Number(parts[1]) || 0);
       const indices = [
         ...new Set(
-          multi[2]
+          parts[2]
             .split(",")
             .map((item) => Number(item.trim()))
             .filter((item) => Number.isInteger(item) && item >= 0),
         ),
       ].sort((a, b) => a - b);
+      const other = parts.length >= 5 ? Number(parts[3]) : -1;
+      const custom =
+        parts.length >= 5 && Number.isInteger(other) && other >= 0
+          ? Buffer.from(parts.slice(4).join(":"), "base64").toString("utf8")
+          : "";
+      const chosen = custom ? indices.filter((index) => index !== other) : indices;
       const keys = [];
       let current = cursor;
-      for (const index of indices) {
+      const moveTo = (index) => {
         while (current < index) {
           keys.push("down");
           current += 1;
@@ -99,7 +105,15 @@ export function classifyDelivery(liveStatus, text) {
           keys.push("up");
           current -= 1;
         }
+      };
+      for (const index of chosen) {
+        moveTo(index);
         keys.push("space");
+      }
+      if (custom) {
+        moveTo(other);
+        keys.push("space");
+        return { mode: "keys-text", keys, text: custom };
       }
       keys.push("enter");
       return { mode: "keys", keys };
@@ -475,6 +489,17 @@ export function deliverReply(paneId, text, fallbackStatus, options = {}) {
   }
   if (plan.mode === "noop") {
     return { status: 0 };
+  }
+  if (plan.mode === "keys-text") {
+    const keyed = run(["pane", "send-keys", paneId, ...plan.keys]);
+    if (herdrFailed(keyed)) {
+      return keyed;
+    }
+    const typed = run(["pane", "send-text", paneId, plan.text]);
+    if (herdrFailed(typed)) {
+      return typed;
+    }
+    return run(["pane", "send-keys", paneId, "enter"]);
   }
   if (plan.mode === "keys") {
     return run(["pane", "send-keys", paneId, ...plan.keys]);

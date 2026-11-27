@@ -29,6 +29,12 @@ test("blocked replies become keys or typed enter", () => {
     mode: "keys",
     keys: ["space", "down", "down", "space", "enter"],
   });
+  const custom = Buffer.from("自定义", "utf8").toString("base64");
+  assert.deepEqual(classifyDelivery("blocked", `multi:0:0,2:4:${custom}`), {
+    mode: "keys-text",
+    keys: ["space", "down", "down", "space", "down", "down", "space"],
+    text: "自定义",
+  });
   assert.deepEqual(classifyDelivery("blocked", "don't delete that"), { mode: "text-enter" });
 });
 
