@@ -63,6 +63,32 @@ test("an OMP form at its note step still gets a Submit button", () => {
   assert.equal(screenHasOpenMenu(noteOnly), true);
 });
 
+test("a multi-question OMP form stays live", () => {
+  const multi = `╭─ Ask · 2 of 6 answered ─────────────────────────────╮
+│ 纯闲聊，几个问题，随手点就行。                      │
+│ ✓ 最喜欢的颜色                                      │
+│    ✓ 蓝色   绿色   黑/灰   暖色系                   │
+│ 运动偏好                                            │
+│ ❯ ○ 主要是看比赛                                    │
+│   ○ 跑步 / 徒步                                     │
+│   ○ Other: type your own                            │
+│ ○ 理想的周末                                        │
+│    出门走走   宅家                                  │
+│ ✓ 一天里状态最好的时段                              │
+│   10                                                │
+│ ○ 随便再说一句（可留空）                            │
+│   Submit                                            │
+╰─────────────────────────────────────────────────────╯
+  󱊷 Asking several personal small-talk questions
+`;
+  assert.equal(screenHasLiveDialog(multi), true);
+  assert.equal(screenHasOpenMenu(multi), true);
+  assert.deepEqual(
+    parseBlockedOptions(multi).map(({ label }) => label),
+    ["主要是看比赛", "跑步 / 徒步", "Other: type your own"],
+  );
+});
+
 test("an OMP form whose title scrolled off still parses", () => {
   const headerless = `│ 随便问一个：你最近在纠结什么。                              │
 │ ✓ 接下来要我先做哪一步？                                      │

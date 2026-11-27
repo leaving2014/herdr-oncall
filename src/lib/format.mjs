@@ -104,12 +104,12 @@ export function screenHasLiveDialog(screen) {
   if (region.omp) {
     for (let i = region.end + 1; i < lines.length; i++) {
       const line = lines[i];
-      if (
-        isBlank(line) ||
-        isRuleLine(line) ||
-        isFooterAt(lines, i) ||
-        /Asking one question via form/i.test(line)
-      ) {
+      // OMP's own "Asking ..." status sits below Submit; everything after it
+      // is the footer/status bar, never a new agent answer.
+      if (/Asking\b.*\bquestions?\b/i.test(line)) {
+        return true;
+      }
+      if (isBlank(line) || isRuleLine(line) || isFooterAt(lines, i)) {
         continue;
       }
       return false;
@@ -181,16 +181,29 @@ function ompLineText(raw) {
     .trim();
 }
 
+function ompInnerText(raw) {
+  return stripAnsi(raw)
+    .replace(/^\s*│/, "")
+    .replace(/│\s*$/, "")
+    .replace(/\s+$/, "");
+}
+
 function ompOptionAt(line) {
-  const text = ompLineText(line);
-  const match = text.match(/^(?:[❯›▸>]\s*)?([◉○●⚪])\s+(.+)$/u);
+  const text = ompInnerText(line);
+  const match = text.match(/^(\s*)(?:(❯|›|▸|>)\s*)?([◉○●⚪])\s+(.+)$/u);
   if (!match) {
     return undefined;
   }
+  const cursor = Boolean(match[2]);
+  // The open question's choices are indented two or more spaces; a folded
+  // question is drawn as a single `○ 标题` row with one leading space.
+  if (!cursor && match[1].length < 2) {
+    return undefined;
+  }
   return {
-    cursor: /^[❯›▸>]/.test(text),
-    selected: /[◉●]/.test(match[1]),
-    label: match[2].trim(),
+    cursor,
+    selected: /[◉●]/.test(match[3]),
+    label: match[4].trim(),
   };
 }
 
