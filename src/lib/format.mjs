@@ -172,7 +172,11 @@ function ompOptionAt(line) {
   if (!match) {
     return undefined;
   }
-  return { selected: /[◉●]/.test(match[1]), label: match[2].trim() };
+  return {
+    cursor: /^[❯›▸>]/.test(text),
+    selected: /[◉●]/.test(match[1]),
+    label: match[2].trim(),
+  };
 }
 
 function ompFormRegion(lines) {
@@ -210,22 +214,40 @@ function ompFormRegion(lines) {
       break;
     }
   }
-  const options = [];
+  const raw = [];
   if (optionStart >= 0) {
-    let index = 0;
     for (let i = optionStart; i <= optionEnd; i++) {
       const option = ompOptionAt(lines[i]);
-      if (!option) {
-        continue;
+      if (option) {
+        raw.push(option);
       }
-      index += 1;
-      options.push({
-        key: String(index),
-        send: String(index),
-        label: option.label.slice(0, 96),
-        whole: option.label,
-      });
     }
+  }
+  const cursor = Math.max(0, raw.findIndex((option) => option.cursor));
+  const total = Number(/of\s+(\d+)\s+answered/i.exec(ompLineText(lines[header]))?.[1] ?? 1);
+  const options = [];
+  for (const [index, option] of raw.entries()) {
+    // The form's own "type your own" row opens an editor that a card cannot
+    // type into; a button for it would look usable and leave the form open.
+    if (/^(?:Other\b|type your own)/i.test(option.label)) {
+      continue;
+    }
+    const keys = [];
+    for (let step = 0; step < Math.abs(index - cursor); step += 1) {
+      keys.push(index > cursor ? "down" : "up");
+    }
+    keys.push("enter");
+    // OMP advances one question per Enter; the last Enter submits. Skipping
+    // an optional note or checkbox this way still answers the chosen question.
+    for (let step = 1; step < total; step += 1) {
+      keys.push("enter");
+    }
+    options.push({
+      key: String(options.length + 1),
+      send: `keys:${keys.join(",")}`,
+      label: option.label.slice(0, 96),
+      whole: option.label,
+    });
   }
   return {
     omp: true,
